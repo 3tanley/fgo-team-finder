@@ -1,0 +1,164 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart';
+
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:chaldea/app/team_finder/battle_runner.dart';
+import 'package:chaldea/app/team_finder/models.dart';
+import 'package:chaldea/app/team_finder/solver.dart';
+import 'package:chaldea/models/models.dart' show Region;
+
+/// State and actions behind the Team Finder page. No widgets in here so it can be tested and reused by a website.
+class TeamFinderController extends ChangeNotifier {
+  TeamFinderController({BattleRunner? runner, this.persist = false}) : runner = runner ?? EngineBattleRunner();
+
+  static const _prefsKey = 'team_finder_box_v1';
+
+  final BattleRunner runner;
+
+  /// Save the box to local storage on every change (the page turns this on; tests leave it off).
+  final bool persist;
+
+  Region region = Region.na;
+  QuestSpec? quest;
+  String? questLabel;
+
+  /// Owned servants, one setup per servant id.
+  final Map<int, ServantSetup> box = {};
+  SolveProgress? progress;
+  String? error;
+  SolveRequest? _request;
+
+  bool get searching => _request != null;
+
+  /// Why the search cannot start yet, or null.
+  String? get blocker {
+    if (box.length < 5) return 'Need at least 5 servants (you have ${box.length})';
+    if (quest == null) return 'Pick a quest first';
+    return null;
+  }
+
+  void setRegion(Region r) {
+    region = r;
+    _reset();
+  }
+
+  void setQuest(QuestSpec q, String label) {
+    quest = q;
+    questLabel = label;
+    _reset();
+  }
+
+  void upsertServant(ServantSetup s) {
+    box[s.svtId] = s;
+    _changedBox();
+  }
+
+  void removeServant(int svtId) {
+    box.remove(svtId);
+    _changedBox();
+  }
+
+  Future<void> search() async {
+    final b = blocker;
+    if (b != null) {
+      error = b;
+      notifyListeners();
+      return;
+    }
+    cancel();
+    error = null;
+    progress = null;
+    final request = SolveRequest(region: region, quest: quest!, box: box.values.toList());
+    _request = request;
+    notifyListeners();
+    try {
+      await for (final p in solve(request, runner)) {
+        if (_request != request) return; // a newer search or a reset took over
+        progress = p;
+        error = p.error;
+        notifyListeners();
+      }
+    } on NeedMoreServants catch (e) {
+      error = e.toString();
+    } finally {
+      if (_request == request) _request = null;
+      notifyListeners();
+    }
+  }
+
+  void cancel() => _request?.cancel();
+
+  void _reset() {
+    cancel();
+    _request = null;
+    progress = null;
+    error = null;
+    notifyListeners();
+  }
+
+  void _changedBox() {
+    _reset();
+    if (persist) _save();
+  }
+
+  Future<void> load() async {
+    try {
+      final saved = (await SharedPreferences.getInstance()).getString(_prefsKey);
+      if (saved == null) return;
+      for (final s in decodeBox(saved)) {
+        box[s.svtId] = s;
+      }
+      notifyListeners();
+    } catch (e) {
+      debugPrint('team finder: could not load saved box: $e');
+    }
+  }
+
+  Future<void> _save() async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(_prefsKey, encodeBox(box.values));
+    } catch (e) {
+      debugPrint('team finder: could not save box: $e');
+    }
+  }
+
+  static String encodeBox(Iterable<ServantSetup> box) => jsonEncode([
+    for (final s in box)
+      {'id': s.svtId, 'lv': s.level, 'skills': s.skillLevels, 'np': s.npLevel, 'atk': s.atkFou, 'hp': s.hpFou},
+  ]);
+
+  /// Reads a saved box. Anything unreadable or out of range is dropped, never thrown.
+  static List<ServantSetup> decodeBox(String text) {
+    final Object? data;
+    try {
+      data = jsonDecode(text);
+    } on FormatException {
+      return [];
+    }
+    if (data is! List) return [];
+    final out = <ServantSetup>[];
+    for (final e in data) {
+      try {
+        final m = e as Map<String, dynamic>;
+        final d = ServantSetup.defaults(m['id'] as int);
+        out.add(
+          ServantSetup(
+            svtId: d.svtId,
+            level: (m['lv'] as int?) ?? d.level,
+            skillLevels: (m['skills'] as List?)?.cast<int>() ?? d.skillLevels,
+            npLevel: (m['np'] as int?) ?? d.npLevel,
+            atkFou: (m['atk'] as int?) ?? d.atkFou,
+            hpFou: (m['hp'] as int?) ?? d.hpFou,
+          ),
+        );
+      } on ArgumentError {
+        continue;
+      } on TypeError {
+        continue;
+      }
+    }
+    return out;
+  }
+}

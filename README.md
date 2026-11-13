@@ -116,3 +116,9 @@ And the dataset is powered by
 - [FGO 効率劇場](https://sites.google.com/view/fgo-domus-aurea)
 
 Thanks for all above communities and contributors.
+
+## Team Finder (fork addition)
+
+This fork adds **Team Finder** (`lib/app/team_finder/`, `lib/app/modules/team_finder/`): pick a quest and the 4★/5★ servants you own, and it searches for teams that clear the quest in 3 turns using the Castoria-style loop (Castoria skill 3 buffs first, charge the attacker only as needed, final-wave mystic-code swap), ranked by total NP damage. Results come from Chaldea's own battle engine. "Not viable" means this search found no clear, not that no loop exists.
+
+**License:** Chaldea is licensed under the GNU AGPL-3.0 (see `LICENSE`), and so is this fork. If you run a modified version as a website or other network service, you must offer its complete source code to its users under the same license. The Chaldea game-data repository (`chaldea-center/chaldea-data`) declares no license; this project only reads it locally for tests and does not redistribute it.

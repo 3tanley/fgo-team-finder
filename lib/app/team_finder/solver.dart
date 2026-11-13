@@ -17,7 +17,16 @@ class TeamResult {
   final TurnPlan plan;
   final bool unverified;
   final int totalNpDamage;
-  const TeamResult({required this.team, required this.plan, required this.unverified, required this.totalNpDamage});
+
+  /// What the best plan did, one line per action (see [BattleOutcome.log]).
+  final List<String> log;
+  const TeamResult({
+    required this.team,
+    required this.plan,
+    required this.unverified,
+    required this.totalNpDamage,
+    this.log = const [],
+  });
 }
 
 class SolveRequest {
@@ -111,7 +120,13 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
       final out = await runner.run(team, req.quest, plan);
       sims++;
       if (out.clearedAllWaves && (best == null || out.totalNpDamage > best.totalNpDamage)) {
-        best = TeamResult(team: team, plan: plan, unverified: out.unverified, totalNpDamage: out.totalNpDamage);
+        best = TeamResult(
+          team: team,
+          plan: plan,
+          unverified: out.unverified,
+          totalNpDamage: out.totalNpDamage,
+          log: out.log,
+        );
       }
     }
     done++;

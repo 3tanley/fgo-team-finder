@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'package:chaldea/app/modules/bond/bond_bonus.dart';
 import 'package:chaldea/app/modules/bond/formation_bond.dart';
+import 'package:chaldea/app/modules/team_finder/team_finder_page.dart';
 import 'package:chaldea/app/modules/creator/chara_list.dart';
 import 'package:chaldea/app/modules/creator/cv_list.dart';
 import 'package:chaldea/app/modules/creator/illustrator_list.dart';
@@ -138,6 +139,7 @@ class GalleryItem {
     npCharge,
     bondBonus,
     formationBond,
+    teamFinder,
     statistics,
     if (!kIsWeb && AppInfo.isDebugOn) fakeGrandOrder,
     importData,
@@ -320,6 +322,13 @@ class GalleryItem {
     titleBuilder: () => S.current.team_bond,
     icon: FontAwesomeIcons.pix.data,
     page: const FormationBondPage(),
+    isDetail: false,
+  );
+  static GalleryItem teamFinder = GalleryItem(
+    name: 'team_finder',
+    titleBuilder: () => 'Team Finder',
+    icon: Icons.groups,
+    page: const TeamFinderPage(),
     isDetail: false,
   );
   static GalleryItem statistics = GalleryItem(

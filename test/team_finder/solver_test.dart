@@ -115,4 +115,18 @@ void main() async {
     final last = await solve(request(), FakeRunner((_, _) => cleared(1, unverified: true))).last;
     expect(last.results.every((r) => r.unverified), isTrue);
   });
+
+  test('a result keeps the action log of its best plan so the UI can show how the team clears', () async {
+    final runner = FakeRunner(
+      (_, _) => const BattleOutcome(
+        clearedAllWaves: true,
+        turnsUsed: 3,
+        totalNpDamage: 7,
+        unverified: false,
+        log: ['T1 skill 0.3 -> 2'],
+      ),
+    );
+    final last = await solve(request(), runner).last;
+    expect(last.results.first.log, ['T1 skill 0.3 -> 2']);
+  });
 }
