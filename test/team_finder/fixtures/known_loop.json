@@ -1,0 +1,57 @@
+{
+  "quest": 94100501,
+  "totalHp": 4361058,
+  "servants": [
+    504500,
+    504500,
+    500900
+  ],
+  "turns": [
+    {
+      "turn": 1,
+      "waveBefore": 1,
+      "waveAfter": 1,
+      "hpBefore": 251609,
+      "npGaugeBefore": [
+        10000,
+        6000,
+        10000
+      ],
+      "npActions": 2,
+      "finished": false
+    },
+    {
+      "turn": 2,
+      "waveBefore": 1,
+      "waveAfter": 1,
+      "hpBefore": 175244,
+      "npGaugeBefore": [
+        0,
+        6000,
+        1855
+      ],
+      "npActions": 0,
+      "finished": false
+    },
+    {
+      "turn": 3,
+      "waveBefore": 1,
+      "waveAfter": 1,
+      "hpBefore": 175244,
+      "npGaugeBefore": [
+        0,
+        6000,
+        1855
+      ],
+      "npActions": 0,
+      "finished": false
+    }
+  ],
+  "win": false,
+  "totalTurns": 2,
+  "note": "Recorded from Chaldea's own engine (JP data 2026-11-13) with default skill targeting and a scripted turn-1 skill dump. NOT verified against the real game; win=false because quest 94100501 has 4.36M enemy HP. Regression record only.",
+  "servantNames": {
+    "504500": "Altria Caster (Castoria)",
+    "500900": "Leonardo da Vinci"
+  }
+}
