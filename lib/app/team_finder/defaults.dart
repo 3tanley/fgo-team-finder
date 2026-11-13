@@ -6,3 +6,5 @@ const int kDefaultCeLevel = 100;
 const int kDefaultMysticCodeLevel = 10;
 // Not specified by the owner: these match Chaldea's own PlayerSvtData defaults.
 const int kDefaultFou = 1000;
+// Black Grail (CE no. 48): goes on the damage dealer, max limit break via CeSetup's defaults.
+const int kBlackGrailCeId = 9400480;

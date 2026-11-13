@@ -93,6 +93,9 @@ class EngineBattleRunner implements BattleRunner {
       }
       await battle.playerTurn(nps, allowSkip: true);
       turnsPlayed += 1;
+      // One wave can die per turn, so once a wave outlives the slack the plan cannot finish: stop early.
+      final slack = plan.turns.length - quest.waves.length;
+      if (!battle.isBattleWin && battle.waveCount < turnsPlayed + 1 - slack) break;
     }
 
     final npDamage = battle.recorder.records

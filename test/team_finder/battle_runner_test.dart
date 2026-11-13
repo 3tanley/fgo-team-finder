@@ -229,4 +229,33 @@ void main() async {
     expect(buffFirst, isNot(damageFirst), reason: 'order must change the damage or this test proves nothing');
     expect(await damage(const [AutoNps()]), buffFirst);
   });
+
+  test('a plan is abandoned as soon as a wave survives its turn (3 waves, 3 turns leaves no slack)', () async {
+    expect(quest.waves.length, 3);
+    final out = await runner.run(
+      soloAltria(ce: charged),
+      quest,
+      const TurnPlan([
+        [AutoNps()],
+        [AutoNps()],
+        [AutoNps()],
+      ]),
+    );
+    expect(out.clearedAllWaves, isFalse);
+    expect(out.turnsUsed, 1, reason: 'wave 1 survived turn 1, so turns 2 and 3 cannot be enough');
+  });
+
+  test('with one turn of slack (4 turns for 3 waves) it gives up one turn later', () async {
+    final out = await runner.run(
+      soloAltria(ce: charged),
+      quest,
+      const TurnPlan([
+        [AutoNps()],
+        [AutoNps()],
+        [AutoNps()],
+        [AutoNps()],
+      ]),
+    );
+    expect(out.turnsUsed, 2);
+  });
 }
