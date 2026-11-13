@@ -43,7 +43,9 @@ void main() async {
       svt.np = 10000;
     }
     await battle.playerTurn([for (final svt in battle.nonnullPlayers) CombatAction(svt, svt.getNPCard()!)]);
-    print('quest ${quest.id}: enemy HP $before -> ${enemyHp(battle)}, wave ${battle.waveCount}, turn ${battle.totalTurnCount}');
+    print(
+      'quest ${quest.id}: enemy HP $before -> ${enemyHp(battle)}, wave ${battle.waveCount}, turn ${battle.totalTurnCount}',
+    );
     // HP is only comparable inside one wave: a killed wave loads the next one.
     expect(battle.waveCount > 1 || enemyHp(battle) < before, isTrue);
   });
@@ -76,7 +78,9 @@ void main() async {
       battle.popSnapshot();
     }
     sw.stop();
-    print('BRANCHES_PER_SECOND ${(runs * 1000 / sw.elapsedMilliseconds).toStringAsFixed(1)} ($runs in ${sw.elapsedMilliseconds} ms)');
+    print(
+      'BRANCHES_PER_SECOND ${(runs * 1000 / sw.elapsedMilliseconds).toStringAsFixed(1)} ($runs in ${sw.elapsedMilliseconds} ms)',
+    );
     expect(battle.waveCount, 1);
   });
 
