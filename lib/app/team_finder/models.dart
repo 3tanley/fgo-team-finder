@@ -42,6 +42,28 @@ class MysticCodeSetup {
   MysticCodeSetup(this.id, {this.level = kDefaultMysticCodeLevel});
 }
 
+class EnemySpec {
+  final int hp;
+  final int classId;
+  final String attribute;
+  final List<int> traits;
+  const EnemySpec({required this.hp, required this.classId, required this.attribute, required this.traits});
+}
+
+class WaveSpec {
+  final List<EnemySpec> enemies;
+  const WaveSpec(this.enemies);
+}
+
+/// A quest as the solver sees it. [waves] is however many the quest really has (not padded to 3);
+/// [unsupportedGimmicks] are mechanics a "viable" verdict can't be trusted through.
+class QuestSpec {
+  final int questId;
+  final List<WaveSpec> waves;
+  final List<String> unsupportedGimmicks;
+  const QuestSpec({required this.questId, required this.waves, required this.unsupportedGimmicks});
+}
+
 /// A servant the player may borrow, with the bond CE it carries.
 class SupportEntry {
   final int svtId;
