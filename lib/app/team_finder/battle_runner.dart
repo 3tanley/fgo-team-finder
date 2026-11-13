@@ -66,14 +66,30 @@ class EngineBattleRunner implements BattleRunner {
         battle.playerTargetIndex = action.targetIndex ?? 0;
         await battle.activateSvtSkill(action.servantIndex, action.skillIndex);
       }
+      final queued = <BattleServantData>{};
       final nps = <CombatAction>[];
-      for (final action in actions.whereType<NpAction>()) {
-        final svt = battle.onFieldAllyServants.getOrNull(action.servantIndex);
-        if (svt == null || !svt.canNP()) {
-          failure = 'turn ${turnNo + 1}: servant ${action.servantIndex} cannot NP (not charged or unavailable)';
-          break turns;
+      void queue(BattleServantData svt) {
+        if (queued.add(svt)) nps.add(CombatAction(svt, svt.getNPCard()!));
+      }
+
+      for (final action in actions) {
+        switch (action) {
+          case SkillAction():
+            break; // already done above
+          case NpAction():
+            final svt = battle.onFieldAllyServants.getOrNull(action.servantIndex);
+            if (svt == null || !svt.canNP()) {
+              failure = 'turn ${turnNo + 1}: servant ${action.servantIndex} cannot NP (not charged or unavailable)';
+              break turns;
+            }
+            queue(svt);
+          case AutoNps():
+            final ready = battle.onFieldAllyServants.whereType<BattleServantData>().where((s) => s.canNP()).toList();
+            bool damaging(BattleServantData s) =>
+                s.getCurrentNP()?.functions.any((f) => f.funcType.isDamageNp) ?? false;
+            ready.where((s) => !damaging(s)).forEach(queue);
+            ready.where(damaging).forEach(queue);
         }
-        nps.add(CombatAction(svt, svt.getNPCard()!));
       }
       await battle.playerTurn(nps, allowSkip: true);
       turnsPlayed += 1;

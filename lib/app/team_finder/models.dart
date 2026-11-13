@@ -102,6 +102,12 @@ class NpAction extends TurnAction {
   const NpAction(this.servantIndex);
 }
 
+/// Fire every NP that is charged when the NP phase starts: non-damaging (buff) NPs first, then damaging
+/// ones, each group in slot order. It never fails: with nothing charged the turn just passes.
+class AutoNps extends TurnAction {
+  const AutoNps();
+}
+
 /// One list of actions per turn. A turn with no actions just ends the turn.
 class TurnPlan {
   final List<List<TurnAction>> turns;

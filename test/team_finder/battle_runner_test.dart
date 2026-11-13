@@ -183,4 +183,50 @@ void main() async {
     );
     expect(withMc.totalNpDamage, plain.totalNpDamage);
   });
+
+  test('AutoNps fires every charged NP: same result as naming it', () async {
+    final named = await runner.run(
+      soloAltria(ce: charged),
+      quest,
+      const TurnPlan([
+        [NpAction(0)],
+      ]),
+    );
+    final auto = await runner.run(
+      soloAltria(ce: charged),
+      quest,
+      const TurnPlan([
+        [AutoNps()],
+      ]),
+    );
+    expect(auto.totalNpDamage, greaterThan(0));
+    expect(auto.totalNpDamage, named.totalNpDamage);
+  });
+
+  test('AutoNps with nothing charged just passes the turn, it is not a failure', () async {
+    final out = await runner.run(
+      soloAltria(),
+      quest,
+      const TurnPlan([
+        [AutoNps()],
+      ]),
+    );
+    expect(out.failure, isNull);
+    expect(out.clearedAllWaves, isFalse);
+    expect(out.turnsUsed, 1);
+    expect(out.totalNpDamage, 0);
+  });
+
+  test('AutoNps fires buff NPs (Castoria) before damage NPs (Altria)', () async {
+    final team = TeamSpec([
+      SlotSpec(ServantSetup(svtId: altria, atkFou: 0, hpFou: 0), ce: charged),
+      SlotSpec(ServantSetup.defaults(504500), ce: charged), // Castoria: buff NP, no damage
+    ]);
+    Future<int> damage(List<TurnAction> actions) async =>
+        (await runner.run(team, quest, TurnPlan([actions]))).totalNpDamage;
+    final damageFirst = await damage(const [NpAction(0), NpAction(1)]);
+    final buffFirst = await damage(const [NpAction(1), NpAction(0)]);
+    expect(buffFirst, isNot(damageFirst), reason: 'order must change the damage or this test proves nothing');
+    expect(await damage(const [AutoNps()]), buffFirst);
+  });
 }
