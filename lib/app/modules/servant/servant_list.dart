@@ -914,7 +914,7 @@ class ServantListPageState extends State<ServantListPage> with SearchableListSta
         break;
     }
     return CustomTile(
-      leading: svt.iconBuilder(context: context, height: 64),
+      leading: svt.iconBuilder(context: context, height: 64, jumpToDetail: widget.onSelected == null),
       title: Text(svt.lAscName.l, maxLines: 1),
       subtitle: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -968,7 +968,7 @@ class ServantListPageState extends State<ServantListPage> with SearchableListSta
 
     return db.onUserData(
       (context, snapshot) => CustomTile(
-        leading: svt.iconBuilder(context: context, width: 48),
+        leading: svt.iconBuilder(context: context, width: 48, jumpToDetail: widget.onSelected == null),
         subtitle: _getDetailTable(svt),
         trailing: trailingButton,
         selected: SplitRoute.isSplit(context) && selected == svt,

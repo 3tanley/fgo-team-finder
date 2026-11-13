@@ -37,6 +37,10 @@ PlayerSvtData playerSvtDataFor(SlotSpec slot) {
 /// Runs a plan on Chaldea's own battle engine. The engine's default damage roll is the minimum roll,
 /// which is what the spec wants ("viable" = guaranteed); battle_runner_test.dart pins that.
 class EngineBattleRunner implements BattleRunner {
+  /// Called with the finished battle, so a check can read the engine's damage records (never used by the app).
+  final void Function(BattleData battle)? onFinished;
+  EngineBattleRunner({this.onFinished});
+
   @override
   Future<BattleOutcome> run(TeamSpec team, QuestSpec quest, TurnPlan plan) async {
     final battle = BattleData();
@@ -112,6 +116,7 @@ class EngineBattleRunner implements BattleRunner {
         .whereType<BattleAttackRecord>()
         .where((r) => r.card?.isTD == true)
         .fold<int>(0, (sum, r) => sum + r.damage);
+    onFinished?.call(battle);
     return BattleOutcome(
       clearedAllWaves: failure == null && battle.isBattleWin,
       turnsUsed: turnsPlayed,

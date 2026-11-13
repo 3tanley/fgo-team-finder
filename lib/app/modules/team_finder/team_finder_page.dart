@@ -3,6 +3,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 import 'package:chaldea/app/api/atlas.dart';
 import 'package:chaldea/app/app.dart';
 import 'package:chaldea/app/modules/servant/servant_list.dart';
+import 'package:chaldea/app/team_finder/labels.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
@@ -47,7 +48,7 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
 
   static String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (_) => ',');
 
-  String _svtName(int id) => db.gameData.servantsById[id]?.lName.l ?? '#$id';
+  String _svtName(int id) => servantLabel(id);
 
   Future<void> _pickQuest() async {
     InputCancelOkDialog.number(
@@ -219,12 +220,14 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
       ),
       for (final (i, r) in p.results.take(50).indexed)
         ExpansionTile(
-          title: Text('#${i + 1}  ${_fmt(r.totalNpDamage)} NP damage${r.unverified ? '  (unverified)' : ''}'),
+          title: Text(
+            '#${i + 1}  ${_fmt(r.totalNpDamage)} NP damage (overkill included)${r.unverified ? '  (unverified)' : ''}',
+          ),
           subtitle: Text(r.team.slots.map((s) => _svtName(s.servant.svtId)).join(' / ')),
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Align(alignment: Alignment.centerLeft, child: SelectableText(r.log.join('\n'))),
+              child: Align(alignment: Alignment.centerLeft, child: SelectableText(describeLog(r.log, r.team).join('\n'))),
             ),
           ],
         ),

@@ -103,6 +103,8 @@ void main() async {
     await tester.pumpAndSettle();
     await tester.tap(find.byType(ExpansionTile).first);
     await tester.pumpAndSettle();
-    expect(find.text('T1 skill 0.3 -> 2'), findsWidgets);
+    // the engine's "T1 skill 0.3 -> 2" is shown with servant names, not slot numbers
+    expect(find.textContaining('skill 3 →'), findsWidgets);
+    expect(find.text('T1 skill 0.3 -> 2'), findsNothing);
   });
 }
