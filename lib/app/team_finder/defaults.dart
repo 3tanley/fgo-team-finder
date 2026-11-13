@@ -8,3 +8,5 @@ const int kDefaultMysticCodeLevel = 10;
 const int kDefaultFou = 1000;
 // Black Grail (CE no. 48): goes on the damage dealer, max limit break via CeSetup's defaults.
 const int kBlackGrailCeId = 9400480;
+// Decisive-Battle Chaldea Uniform (mystic code 210, "Plug V2"): also Chaldea's own default.
+const int kDefaultMysticCodeId = 210;

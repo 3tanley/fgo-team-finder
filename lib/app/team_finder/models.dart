@@ -108,6 +108,12 @@ class AutoNps extends TurnAction {
   const AutoNps();
 }
 
+/// The owner's loop for one turn (see loop_policy.dart): the engine's live state decides which skills to
+/// use, then every charged NP fires like [AutoNps]. A plan of `AutoLoop`s per turn is the whole loop.
+class AutoLoop extends TurnAction {
+  const AutoLoop();
+}
+
 /// One list of actions per turn. A turn with no actions just ends the turn.
 class TurnPlan {
   final List<List<TurnAction>> turns;
@@ -124,12 +130,17 @@ class BattleOutcome {
 
   /// Why the plan could not be carried out (for example an NP that was not charged), else null.
   final String? failure;
+
+  /// What happened, one line per action: `T1 skill 0.3 -> 2` (servant.skill -> target), `T3 swap 1 <-> 3`,
+  /// `T3 mc 1`, `T1 np 2`. Lets the UI show the plan and tests check the order.
+  final List<String> log;
   const BattleOutcome({
     required this.clearedAllWaves,
     required this.turnsUsed,
     required this.totalNpDamage,
     required this.unverified,
     this.failure,
+    this.log = const [],
   });
 }
 

@@ -18,3 +18,6 @@ List<SupportEntry> supportList(Region region) {
           SupportEntry(svt.id, svt.bondEquips.first),
   ];
 }
+
+/// True if [svtId] is one of the owner's named loop supports (in any region's data).
+bool isSupportName(int svtId) => kSupportCollectionNos.any((no) => db.gameData.servantsNoDup[no]?.id == svtId);

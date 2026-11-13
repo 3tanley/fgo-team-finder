@@ -34,7 +34,7 @@ void main() async {
     final teams = generateTeams(fiveBox, Region.na).toList();
     expect(teams, isNotEmpty);
     for (final t in teams) {
-      expect(t.slots.length, 3);
+      expect(t.slots.length, inInclusiveRange(3, 4)); // 4 when a swap-in exists
       expect(supports.containsKey(t.slots[0].servant.svtId), isTrue);
       expect(t.slots[0].ce?.ceId, supports[t.slots[0].servant.svtId]);
       expect(boxIds, containsAll([t.slots[1].servant.svtId, t.slots[2].servant.svtId]));
@@ -99,5 +99,34 @@ void main() async {
         )
         .toList();
     expect(teams.length, 1);
+  });
+
+  test('every team carries the Decisive-Battle Chaldea Uniform (mystic code 210) at level 10', () {
+    for (final t in generateTeams(fiveBox, Region.na)) {
+      expect(t.mysticCode?.id, kDefaultMysticCodeId);
+      expect(t.mysticCode?.level, 10);
+    }
+    expect(kDefaultMysticCodeId, 210);
+  });
+
+  test('a box servant from the support names that is not in the front row becomes the back-row swap-in', () {
+    final oberon = db.gameData.servantsNoDup[316]!.id;
+    final teams = generateTeams(box([altria, castoria, nero, oberon, emiya]), Region.na).toList();
+    final withOberon = teams.where((t) => t.slots.length == 4 && t.slots[3].servant.svtId == oberon);
+    expect(withOberon, isNotEmpty);
+    for (final t in teams.where((t) => t.slots.length == 4)) {
+      final frontIds = t.slots.take(3).map((s) => s.servant.svtId).toList();
+      expect(t.slots[3].ce, isNull);
+      expect(isSupportName(t.slots[3].servant.svtId), isTrue);
+      // the swap-in is a different box entry from the two box servants in front
+      final boxIdsInFront = frontIds.skip(1).toList();
+      expect(boxIdsInFront.contains(oberon) && t.slots[3].servant.svtId == oberon, isFalse);
+    }
+  });
+
+  test('a box with no support-name servant outside the front row has plain 3-servant teams', () {
+    final plain = generateTeams(box([altria, nero, daVinci, emiya, altria]), Region.na).toList();
+    expect(plain, isNotEmpty);
+    expect(plain.every((t) => t.slots.length == 3), isTrue);
   });
 }

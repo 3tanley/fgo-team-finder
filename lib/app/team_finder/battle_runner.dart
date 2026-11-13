@@ -1,8 +1,10 @@
+import 'package:chaldea/app/battle/interactions/_delegate.dart';
 import 'package:chaldea/app/battle/models/battle.dart';
 import 'package:chaldea/app/battle/utils/battle_logger.dart';
 import 'package:chaldea/models/models.dart';
 import 'package:chaldea/utils/utils.dart';
 
+import 'loop_policy.dart';
 import 'models.dart';
 
 abstract class BattleRunner {
@@ -47,13 +49,17 @@ class EngineBattleRunner implements BattleRunner {
         ..mysticCode = code
         ..level = mcSetup.level;
     }
+    final policy = LoopPolicy();
+    battle.delegate = BattleDelegate()..replaceMember = policy.chooseSwap;
     await battle.init(quest.phase, [for (final slot in team.slots) playerSvtDataFor(slot)], mysticCode);
 
     String? failure;
+    final log = <String>[];
     var turnsPlayed = 0; // the engine's totalTurnCount is the *next* turn number, so count ourselves
     turns:
     for (final (turnNo, actions) in plan.turns.indexed) {
       if (battle.isBattleWin || battle.isBattleFinished) break;
+      if (actions.any((a) => a is AutoLoop)) await policy.playSkills(battle, team, quest, turnNo, log);
       for (final action in actions.whereType<SkillAction>()) {
         final svt = battle.onFieldAllyServants.getOrNull(action.servantIndex);
         if (svt == null ||
@@ -65,6 +71,7 @@ class EngineBattleRunner implements BattleRunner {
         }
         battle.playerTargetIndex = action.targetIndex ?? 0;
         await battle.activateSvtSkill(action.servantIndex, action.skillIndex);
+        log.add('T${turnNo + 1} skill ${action.servantIndex}.${action.skillIndex + 1} -> ${action.targetIndex ?? 0}');
       }
       final queued = <BattleServantData>{};
       final nps = <CombatAction>[];
@@ -83,13 +90,16 @@ class EngineBattleRunner implements BattleRunner {
               break turns;
             }
             queue(svt);
-          case AutoNps():
+          case AutoNps() || AutoLoop():
             final ready = battle.onFieldAllyServants.whereType<BattleServantData>().where((s) => s.canNP()).toList();
             bool damaging(BattleServantData s) =>
                 s.getCurrentNP()?.functions.any((f) => f.funcType.isDamageNp) ?? false;
             ready.where((s) => !damaging(s)).forEach(queue);
             ready.where(damaging).forEach(queue);
         }
+      }
+      for (final np in nps) {
+        log.add('T${turnNo + 1} np ${battle.onFieldAllyServants.indexOf(np.actor)}');
       }
       await battle.playerTurn(nps, allowSkip: true);
       turnsPlayed += 1;
@@ -108,6 +118,7 @@ class EngineBattleRunner implements BattleRunner {
       totalNpDamage: npDamage,
       unverified: quest.unsupportedGimmicks.isNotEmpty,
       failure: failure,
+      log: log,
     );
   }
 }
