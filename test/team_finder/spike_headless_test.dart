@@ -2,7 +2,6 @@
 // multi-servant party, and how fast? Results are recorded in docs/team_finder_spike.md.
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:chaldea/app/battle/interactions/_delegate.dart';
 import 'package:chaldea/app/battle/models/battle.dart';
 import 'package:chaldea/models/models.dart';
 

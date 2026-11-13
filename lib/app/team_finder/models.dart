@@ -1,3 +1,5 @@
+import 'package:chaldea/models/models.dart' show QuestPhase;
+
 import 'defaults.dart';
 
 /// A servant as the user owns it. Blank input means the defaults in defaults.dart.
@@ -61,7 +63,68 @@ class QuestSpec {
   final int questId;
   final List<WaveSpec> waves;
   final List<String> unsupportedGimmicks;
-  const QuestSpec({required this.questId, required this.waves, required this.unsupportedGimmicks});
+
+  /// The source phase: it is what the battle engine is initialised with.
+  final QuestPhase phase;
+  const QuestSpec({required this.questId, required this.waves, required this.unsupportedGimmicks, required this.phase});
+}
+
+class SlotSpec {
+  final ServantSetup servant;
+  final CeSetup? ce;
+  const SlotSpec(this.servant, {this.ce});
+}
+
+/// Up to 6 servants: indices 0-2 start on the field, 3-5 start in the back row.
+class TeamSpec {
+  final List<SlotSpec> slots;
+  final MysticCodeSetup? mysticCode;
+  TeamSpec(this.slots, {this.mysticCode}) {
+    if (slots.isEmpty || slots.length > 6) throw ArgumentError.value(slots.length, 'slots', 'need 1..6 servants');
+  }
+}
+
+sealed class TurnAction {
+  const TurnAction();
+}
+
+/// Use servant [servantIndex]'s skill [skillIndex] (both 0-based), optionally on ally [targetIndex].
+class SkillAction extends TurnAction {
+  final int servantIndex;
+  final int skillIndex;
+  final int? targetIndex;
+  const SkillAction(this.servantIndex, this.skillIndex, {this.targetIndex});
+}
+
+/// Fire servant [servantIndex]'s NP. Within a turn all skills happen first, then the NPs in list order.
+class NpAction extends TurnAction {
+  final int servantIndex;
+  const NpAction(this.servantIndex);
+}
+
+/// One list of actions per turn. A turn with no actions just ends the turn.
+class TurnPlan {
+  final List<List<TurnAction>> turns;
+  const TurnPlan(this.turns);
+}
+
+class BattleOutcome {
+  final bool clearedAllWaves;
+  final int turnsUsed;
+  final int totalNpDamage;
+
+  /// True when the quest has gimmicks we cannot vouch for; never show such a team as plainly "viable".
+  final bool unverified;
+
+  /// Why the plan could not be carried out (for example an NP that was not charged), else null.
+  final String? failure;
+  const BattleOutcome({
+    required this.clearedAllWaves,
+    required this.turnsUsed,
+    required this.totalNpDamage,
+    required this.unverified,
+    this.failure,
+  });
 }
 
 /// A servant the player may borrow, with the bond CE it carries.

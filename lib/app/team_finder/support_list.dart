@@ -14,6 +14,7 @@ List<SupportEntry> supportList(Region region) {
   return [
     for (final no in kSupportCollectionNos)
       if (db.gameData.servantsNoDup[no] case final svt?)
-        if ((released == null || released.contains(svt.id)) && svt.bondEquip > 0) SupportEntry(svt.id, svt.bondEquip),
+        if ((released == null || released.contains(svt.id)) && svt.bondEquips.isNotEmpty)
+          SupportEntry(svt.id, svt.bondEquips.first),
   ];
 }

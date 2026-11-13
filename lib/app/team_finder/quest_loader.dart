@@ -34,6 +34,7 @@ QuestSpec questSpecFromPhase(QuestPhase q) {
         ]),
     ],
     unsupportedGimmicks: gimmicks.toList()..sort(),
+    phase: q,
   );
 }
 
