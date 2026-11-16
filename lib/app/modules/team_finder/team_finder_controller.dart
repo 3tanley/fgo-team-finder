@@ -34,7 +34,7 @@ class TeamFinderController extends ChangeNotifier {
 
   /// Why the search cannot start yet, or null.
   String? get blocker {
-    if (box.length < 5) return 'Need at least 5 servants (you have ${box.length})';
+    if (box.length < kMinBoxServants) return 'Need at least $kMinBoxServants servants (you have ${box.length})';
     if (quest == null) return 'Pick a quest first';
     return null;
   }

@@ -42,9 +42,16 @@ void main() async {
   SolveRequest request({List<ServantSetup>? b, QuestSpec? quest, int maxSims = 100000}) =>
       SolveRequest(region: Region.na, quest: quest ?? quest3, box: b ?? fiveBox, maxSims: maxSims);
 
-  test('fewer than 5 box servants is an error, not an empty answer', () {
-    final stream = solve(request(b: box([altria, castoria, daVinci, nero])), FakeRunner((_, _) => failed()));
+  test('fewer than 2 box servants is an error, not an empty answer', () {
+    final stream = solve(request(b: box([altria])), FakeRunner((_, _) => failed()));
     expect(stream, emitsError(isA<NeedMoreServants>()));
+  });
+
+  test('2 box servants are enough: the search runs and finishes without an error', () async {
+    final last = await solve(request(b: box([altria, castoria])), FakeRunner((_, _) => cleared(1))).last;
+    expect(last.finished, isTrue);
+    expect(last.error, isNull);
+    expect(last.teamsTotal, greaterThan(0)); // Artoria (Buster) is paired with a Koyanskaya support
   });
 
   test('viable teams are ranked by total NP damage; failures are only counted', () async {

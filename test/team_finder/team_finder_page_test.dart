@@ -58,9 +58,9 @@ void main() async {
   FilledButton searchButton(WidgetTester tester) =>
       tester.widget<FilledButton>(find.widgetWithText(FilledButton, 'Search'));
 
-  testWidgets('empty state: says it needs 5 servants and the Search button is disabled', (tester) async {
+  testWidgets('empty state: says it needs 2 servants and the Search button is disabled', (tester) async {
     await pump(tester);
-    expect(find.text('Need at least 5 servants (you have 0)'), findsOneWidget);
+    expect(find.text('Need at least 2 servants (you have 0)'), findsOneWidget);
     expect(searchButton(tester).onPressed, isNull);
     expect(find.text('NA'), findsOneWidget);
     expect(find.text('JP'), findsOneWidget);

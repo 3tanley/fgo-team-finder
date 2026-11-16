@@ -29,9 +29,13 @@ void main() async {
     return c;
   }
 
-  test('with 4 servants the search is blocked and says it needs at least 5', () {
-    expect(controller(servants: 4).blocker, contains('at least 5'));
-    expect(controller(servants: 4).blocker, contains('4'));
+  test('with 1 servant the search is blocked and says it needs at least 2', () {
+    expect(controller(servants: 1).blocker, contains('at least 2'));
+    expect(controller(servants: 1).blocker, contains('1'));
+  });
+
+  test('2 servants and a quest: nothing blocks the search', () {
+    expect(controller(servants: 2).blocker, isNull);
   });
 
   test('without a quest the search is blocked and asks for one', () {
@@ -65,9 +69,9 @@ void main() async {
   });
 
   test('a blocked search sets the error instead of running', () async {
-    final c = controller(servants: 3);
+    final c = controller(servants: 1);
     await c.search();
-    expect(c.error, contains('at least 5'));
+    expect(c.error, contains('at least 2'));
     expect(c.progress, isNull);
   });
 

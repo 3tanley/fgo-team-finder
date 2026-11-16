@@ -5,11 +5,14 @@ import 'models.dart';
 import 'team_generator.dart';
 import 'turn_planner.dart';
 
+/// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
+const int kMinBoxServants = 2;
+
 class NeedMoreServants implements Exception {
   final int have;
   const NeedMoreServants(this.have);
   @override
-  String toString() => 'need at least 5 servants, got $have';
+  String toString() => 'need at least $kMinBoxServants servants, got $have';
 }
 
 class TeamResult {
@@ -70,11 +73,11 @@ class SolveProgress {
 }
 
 /// Option-1 search: every team from [generateTeams], every plan from [planTurns], keeping each team's
-/// best clearing plan. Throws [NeedMoreServants] (as a stream error) for fewer than 5 box servants.
+/// best clearing plan. Throws [NeedMoreServants] (as a stream error) for fewer than [kMinBoxServants] box servants.
 /// shortcut: runs on the calling isolate and yields to the event loop between teams; move the engine
 /// into worker isolates if searches are too slow.
 Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
-  if (req.box.length < 5) throw NeedMoreServants(req.box.length);
+  if (req.box.length < kMinBoxServants) throw NeedMoreServants(req.box.length);
   final waves = req.quest.waves.length;
   if (waves > 3) {
     yield SolveProgress(
