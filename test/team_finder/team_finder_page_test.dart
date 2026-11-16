@@ -97,6 +97,37 @@ void main() async {
     expect(find.textContaining('Loop rules used'), findsOneWidget);
   });
 
+  testWidgets('the edit dialog has five append fields that default to 0 and save what the user types', (tester) async {
+    final c = await pump(tester, servants: 5);
+    await tester.tap(find.text('Altria Pendragon (Saber)'));
+    await tester.pumpAndSettle();
+    for (var n = 1; n <= 5; n++) {
+      expect(find.widgetWithText(TextField, 'Append $n'), findsOneWidget);
+      expect(tester.widget<TextField>(find.widgetWithText(TextField, 'Append $n')).controller?.text, '0');
+    }
+    await tester.enterText(find.widgetWithText(TextField, 'Append 3'), '10');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(c.box[100100]!.appendLevels, [0, 0, 10, 0, 0]);
+    expect(find.textContaining('append 0/0/10/0/0'), findsOneWidget); // shown in the row once any append is set
+  });
+
+  testWidgets('a blank append field means 0 and an append above 10 is refused', (tester) async {
+    final c = await pump(tester, servants: 5);
+    await tester.tap(find.text('Altria Pendragon (Saber)'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.widgetWithText(TextField, 'Append 1'), '');
+    await tester.enterText(find.widgetWithText(TextField, 'Append 2'), '11');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('append'), findsWidgets); // the error text names the append range
+    expect(c.box[100100]!.appendLevels, [0, 0, 0, 0, 0]); // nothing saved
+    await tester.enterText(find.widgetWithText(TextField, 'Append 2'), '');
+    await tester.tap(find.text('OK'));
+    await tester.pumpAndSettle();
+    expect(c.box[100100]!.appendLevels, [0, 0, 0, 0, 0]);
+  });
+
   testWidgets('expanding a result shows how the team clears', (tester) async {
     await pump(tester, servants: 5, withQuest: true);
     await tester.tap(find.widgetWithText(FilledButton, 'Search'));

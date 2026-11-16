@@ -13,6 +13,18 @@ void main() {
     expect(s.hpFou, 1000);
   });
 
+  test('append skills default to 0 (not unlocked) for all five unless the user sets them', () {
+    expect(ServantSetup.defaults(504500).appendLevels, [0, 0, 0, 0, 0]);
+    expect(ServantSetup(svtId: 1).appendLevels, [0, 0, 0, 0, 0]);
+    expect(ServantSetup(svtId: 1, appendLevels: [10, 0, 5, 0, 1]).appendLevels, [10, 0, 5, 0, 1]);
+  });
+
+  test('ServantSetup rejects append lists that are not 5 levels of 0..10', () {
+    expect(() => ServantSetup(svtId: 1, appendLevels: [0, 0, 0, 0]), throwsArgumentError);
+    expect(() => ServantSetup(svtId: 1, appendLevels: [0, 0, 0, 0, 11]), throwsArgumentError);
+    expect(() => ServantSetup(svtId: 1, appendLevels: [-1, 0, 0, 0, 0]), throwsArgumentError);
+  });
+
   test('CeSetup defaults to level 100 and max limit break', () {
     final ce = CeSetup(9400340);
     expect(ce.level, 100);

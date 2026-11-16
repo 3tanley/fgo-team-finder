@@ -43,6 +43,26 @@ void main() async {
     expect(data.equip1.limitBreak, isTrue);
   });
 
+  test('playerSvtDataFor passes the append skill levels to the engine, 0 meaning not unlocked', () {
+    expect(playerSvtDataFor(SlotSpec(ServantSetup(svtId: altria))).appendLvs, [0, 0, 0, 0, 0]);
+    final data = playerSvtDataFor(SlotSpec(ServantSetup(svtId: altria, appendLevels: [10, 0, 0, 5, 0])));
+    expect(data.appendLvs, [10, 0, 0, 5, 0]);
+  });
+
+  test('append levels above 0 really give the servant their append passives in battle', () async {
+    Future<int> buffCount(List<int> appends) async {
+      final b = BattleData();
+      await b.init(chaldeaQuest, [
+        playerSvtDataFor(SlotSpec(ServantSetup(svtId: altria, appendLevels: appends))),
+      ], null);
+      return b.nonnullPlayers.first.getAllBuffs(b).length;
+    }
+
+    final none = await buffCount([0, 0, 0, 0, 0]);
+    final all = await buffCount([10, 10, 10, 10, 10]);
+    expect(all, greaterThan(none));
+  });
+
   test('an NP that is not charged ends the run uncleared with zero damage', () async {
     final out = await runner.run(
       soloAltria(),

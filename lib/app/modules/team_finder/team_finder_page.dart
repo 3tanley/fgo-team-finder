@@ -154,7 +154,10 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
               dense: true,
               leading: db.gameData.servantsById[s.svtId]?.iconBuilder(context: context, width: 40, jumpToDetail: false),
               title: Text(_svtName(s.svtId)),
-              subtitle: Text('Lv${s.level} · ${s.skillLevels.join('/')} · NP${s.npLevel} · fou ${s.atkFou}/${s.hpFou}'),
+              subtitle: Text(
+                'Lv${s.level} · ${s.skillLevels.join('/')} · NP${s.npLevel} · fou ${s.atkFou}/${s.hpFou}'
+                '${s.appendLevels.any((e) => e > 0) ? ' · append ${s.appendLevels.join('/')}' : ''}',
+              ),
               onTap: () => _editServant(s),
               trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => c.removeServant(s.svtId)),
             ),
@@ -250,6 +253,7 @@ class _ServantEditDialog extends StatefulWidget {
 class _ServantEditDialogState extends State<_ServantEditDialog> {
   late final _level = TextEditingController(text: '${widget.current.level}');
   late final _skills = [for (final s in widget.current.skillLevels) TextEditingController(text: '$s')];
+  late final _appends = [for (final a in widget.current.appendLevels) TextEditingController(text: '$a')];
   late final _np = TextEditingController(text: '${widget.current.npLevel}');
   late final _atk = TextEditingController(text: '${widget.current.atkFou}');
   late final _hp = TextEditingController(text: '${widget.current.hpFou}');
@@ -257,7 +261,7 @@ class _ServantEditDialogState extends State<_ServantEditDialog> {
 
   @override
   void dispose() {
-    for (final c in [_level, ..._skills, _np, _atk, _hp]) {
+    for (final c in [_level, ..._skills, ..._appends, _np, _atk, _hp]) {
       c.dispose();
     }
     super.dispose();
@@ -269,10 +273,14 @@ class _ServantEditDialogState extends State<_ServantEditDialog> {
     try {
       final level = read(_level, widget.current.level);
       if (level < 1 || level > 120) throw ArgumentError('level must be 1..120');
+      // blank = 0 (append not unlocked)
+      final appends = [for (final c in _appends) read(c, 0)];
+      if (appends.any((e) => e < 0 || e > 10)) throw ArgumentError('append levels must be 0..10 (0 = not unlocked)');
       final setup = ServantSetup(
         svtId: widget.current.svtId,
         level: level,
         skillLevels: [for (var i = 0; i < 3; i++) read(_skills[i], ServantSetup.defaults(0).skillLevels[i])],
+        appendLevels: appends,
         npLevel: read(_np, ServantSetup.defaults(0).npLevel),
         atkFou: read(_atk, ServantSetup.defaults(0).atkFou),
         hpFou: read(_hp, ServantSetup.defaults(0).hpFou),
@@ -310,6 +318,7 @@ class _ServantEditDialogState extends State<_ServantEditDialog> {
                 _field('Skill 1', _skills[0]),
                 _field('Skill 2', _skills[1]),
                 _field('Skill 3', _skills[2]),
+                for (final (i, c) in _appends.indexed) _field('Append ${i + 1}', c),
                 _field('ATK fou', _atk),
                 _field('HP fou', _hp),
               ],

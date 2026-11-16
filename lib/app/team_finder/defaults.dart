@@ -2,6 +2,9 @@
 const int kDefaultServantLevel = 90;
 const List<int> kDefaultSkillLevels = [10, 10, 10];
 const int kDefaultNpLevel = 1;
+// Append skills 1..5: 0 = not unlocked, which is the default until the user sets a level (1..10).
+const int kAppendSkillCount = 5;
+const List<int> kDefaultAppendLevels = [0, 0, 0, 0, 0];
 const int kDefaultCeLevel = 100;
 const int kDefaultMysticCodeLevel = 10;
 // Not specified by the owner: these match Chaldea's own PlayerSvtData defaults.

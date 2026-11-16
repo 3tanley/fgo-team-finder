@@ -126,7 +126,15 @@ class TeamFinderController extends ChangeNotifier {
 
   static String encodeBox(Iterable<ServantSetup> box) => jsonEncode([
     for (final s in box)
-      {'id': s.svtId, 'lv': s.level, 'skills': s.skillLevels, 'np': s.npLevel, 'atk': s.atkFou, 'hp': s.hpFou},
+      {
+        'id': s.svtId,
+        'lv': s.level,
+        'skills': s.skillLevels,
+        'append': s.appendLevels,
+        'np': s.npLevel,
+        'atk': s.atkFou,
+        'hp': s.hpFou,
+      },
   ]);
 
   /// Reads a saved box. Anything unreadable or out of range is dropped, never thrown.
@@ -148,6 +156,7 @@ class TeamFinderController extends ChangeNotifier {
             svtId: d.svtId,
             level: (m['lv'] as int?) ?? d.level,
             skillLevels: (m['skills'] as List?)?.cast<int>() ?? d.skillLevels,
+            appendLevels: (m['append'] as List?)?.cast<int>() ?? d.appendLevels, // boxes saved before appends have none
             npLevel: (m['np'] as int?) ?? d.npLevel,
             atkFou: (m['atk'] as int?) ?? d.atkFou,
             hpFou: (m['hp'] as int?) ?? d.hpFou,

@@ -104,6 +104,18 @@ void main() async {
     expect(s.skillLevels, [6, 7, 8]);
   });
 
+  test('append levels survive encode and decode, and a box saved before they existed loads with all zeros', () {
+    final c = controller();
+    c.upsertServant(ServantSetup(svtId: 100100, appendLevels: [10, 0, 3, 0, 1]));
+    final back = TeamFinderController.decodeBox(TeamFinderController.encodeBox(c.box.values));
+    expect(back.firstWhere((e) => e.svtId == 100100).appendLevels, [10, 0, 3, 0, 1]);
+    final old = TeamFinderController.decodeBox(
+      '[{"id":100100,"lv":90,"skills":[10,10,10],"np":1,"atk":1000,"hp":1000}]',
+    );
+    expect(old.single.appendLevels, [0, 0, 0, 0, 0]);
+    expect(TeamFinderController.decodeBox('[{"id":100100,"append":[0,0,0,0,11]}]'), isEmpty); // out of range dropped
+  });
+
   test('decoding garbage or out-of-range saved data gives an empty or cleaned box, never a crash', () {
     expect(TeamFinderController.decodeBox('not json'), isEmpty);
     expect(TeamFinderController.decodeBox('{"a":1}'), isEmpty);

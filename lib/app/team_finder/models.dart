@@ -7,6 +7,9 @@ class ServantSetup {
   final int svtId;
   final int level;
   final List<int> skillLevels;
+
+  /// Append skills 1..5; 0 = not unlocked.
+  final List<int> appendLevels;
   final int npLevel;
   final int atkFou;
   final int hpFou;
@@ -16,12 +19,16 @@ class ServantSetup {
     required this.svtId,
     this.level = kDefaultServantLevel,
     this.skillLevels = kDefaultSkillLevels,
+    this.appendLevels = kDefaultAppendLevels,
     this.npLevel = kDefaultNpLevel,
     this.atkFou = kDefaultFou,
     this.hpFou = kDefaultFou,
   }) {
     if (skillLevels.length != 3 || skillLevels.any((e) => e < 1 || e > 10)) {
       throw ArgumentError.value(skillLevels, 'skillLevels', 'need 3 levels, each 1..10');
+    }
+    if (appendLevels.length != kAppendSkillCount || appendLevels.any((e) => e < 0 || e > 10)) {
+      throw ArgumentError.value(appendLevels, 'appendLevels', 'need $kAppendSkillCount levels, each 0..10');
     }
     if (npLevel < 1 || npLevel > 5) {
       throw ArgumentError.value(npLevel, 'npLevel', 'must be 1..5');

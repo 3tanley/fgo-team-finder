@@ -21,6 +21,7 @@ PlayerSvtData playerSvtDataFor(SlotSpec slot) {
     ..lv = s.level
     ..skills = [for (final n in kActiveSkillNums) svt.groupedActiveSkills[n]?.last]
     ..skillLvs = List.of(s.skillLevels)
+    ..appendLvs = List.of(s.appendLevels)
     ..td = svt.groupedNoblePhantasms[1]?.last
     ..tdLv = s.npLevel
     ..atkFou = s.atkFou

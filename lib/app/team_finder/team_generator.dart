@@ -27,7 +27,8 @@ bool _sameSetup(ServantSetup a, ServantSetup b) =>
     a.npLevel == b.npLevel &&
     a.atkFou == b.atkFou &&
     a.hpFou == b.hpFou &&
-    a.skillLevels.join(',') == b.skillLevels.join(',');
+    a.skillLevels.join(',') == b.skillLevels.join(',') &&
+    a.appendLevels.join(',') == b.appendLevels.join(',');
 
 /// Teams for the owner's loop: the borrowed support in slot 0 (carrying its bond CE; which support depends on
 /// the damage dealer's NP card, see [kSupportCollectionNosByCard]), every pair of box

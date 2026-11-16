@@ -122,6 +122,26 @@ void main() async {
     expect(teams.length, 1);
   });
 
+  test('the same servant with different append levels counts as a different team', () {
+    List<ServantSetup> pair(List<int> appendOfSecond) => [
+      ServantSetup(svtId: altria),
+      ServantSetup(svtId: altria, appendLevels: appendOfSecond),
+      ServantSetup.defaults(castoria),
+      ServantSetup.defaults(castoria),
+      ServantSetup.defaults(castoria),
+    ];
+    int pairTeams(List<ServantSetup> b) => generateTeams(b, Region.jp)
+        .where(
+          (t) =>
+              t.slots[0].servant.svtId == idOf(314) &&
+              t.slots[1].servant.svtId == altria &&
+              t.slots[2].servant.svtId == altria,
+        )
+        .length;
+    expect(pairTeams(pair([0, 0, 0, 0, 0])), 1); // identical entries: one team
+    expect(pairTeams(pair([10, 0, 0, 0, 0])), 2); // different entries: one team per Black Grail holder
+  });
+
   test('every team carries the Decisive-Battle Chaldea Uniform (mystic code 210) at level 10', () {
     for (final t in generateTeams(fiveBox, Region.na)) {
       expect(t.mysticCode?.id, kDefaultMysticCodeId);
