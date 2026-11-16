@@ -117,13 +117,9 @@ void main() async {
     expect(castoria.grailedLv(10), greaterThan(castoria.lvMax));
   });
 
-  test('common supports for the selector row: Skadi, Castoria, Koyanskaya of Light, Oberon, Summer Skadi, Urðr', () {
+  test('the selector row is Skadi, Castoria, Koyanskaya of Light, Oberon, Summer Skadi and Urðr, in every region', () {
     int idOf(int no) => db.gameData.servantsNoDup[no]!.id;
-    expect(commonSupportIds(Region.jp), [215, 284, 314, 316, 357, 470].map(idOf).toList());
-  });
-
-  test('NA does not list the JP-only Urðr in that row', () {
-    expect(commonSupportIds(Region.na), isNot(contains(urdr.id)));
-    expect(commonSupportIds(Region.na).length, 5);
+    expect(commonSupportIds(), [215, 284, 314, 316, 357, 470].map(idOf).toList());
+    expect(commonSupportIds(), contains(urdr.id)); // asked for explicitly, even though she is JP-only
   });
 }

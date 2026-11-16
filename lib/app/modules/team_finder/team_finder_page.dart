@@ -103,7 +103,7 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     router.pushPage(
       ServantListPage(
         // the most common supports pinned in a row at the top, like Laplace's servant selector
-        pinged: commonSupportIds(c.region),
+        pinged: commonSupportIds(),
         showSecondaryFilter: true,
         onSelected: (svt) {
           if (svt.rarity < 4) {

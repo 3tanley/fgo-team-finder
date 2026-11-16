@@ -38,14 +38,10 @@ ServantSetup? ownedSetupFor(int svtId) {
 }
 
 /// The row pinned to the top of the servant selector: Skadi, Castoria, Koyanskaya of Light, Oberon, Summer Skadi
-/// (the owner's pinned row) and Urðr. Servants not released in [region] are left out.
+/// (the owner's pinned row) and Urðr. Urðr is listed in every region on request, although she is JP-only.
 const List<int> kCommonSupportCollectionNos = [215, 284, 314, 316, 357, 470];
 
-List<int> commonSupportIds(Region region) {
-  final released = region == Region.jp ? null : db.gameData.mappingData.entityRelease.ofRegion(region);
-  return [
-    for (final no in kCommonSupportCollectionNos)
-      if (db.gameData.servantsNoDup[no] case final svt?)
-        if (released == null || released.contains(svt.id)) svt.id,
-  ];
-}
+List<int> commonSupportIds() => [
+  for (final no in kCommonSupportCollectionNos)
+    if (db.gameData.servantsNoDup[no] case final svt?) svt.id,
+];
