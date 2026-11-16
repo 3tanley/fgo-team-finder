@@ -1,24 +1,26 @@
-name: Deploy web
+name: Deploy web (GitHub Pages)
 
+# Replaces upstream's workflow, which published to chaldea-center/app and an Alibaba OSS bucket.
 on:
   push:
     branches:
-      - '**'
-    tags-ignore:
-      - '**'
+      - team-finder
   workflow_dispatch:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
 jobs:
-  deploy-web:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-
-      - name: Extract branch name
-        id: extract-branch-name
-        run: |
-          echo ${GITHUB_REF#refs/heads/}
-          echo "BRANCH_NAME=$(echo ${GITHUB_REF#refs/heads/})" >> $GITHUB_OUTPUT
 
       - uses: subosito/flutter-action@v2
         with:
@@ -26,34 +28,25 @@ jobs:
           flutter-version-file: "pubspec.yaml"
           cache: true
 
-      - run: |
-          flutter --version
-          flutter pub get
+      - run: flutter pub get
 
       - name: Build web
         run: |
           dart ./scripts/gen_git_info.dart
           dart ./scripts/patch_before_build.dart web
-          flutter build web --release -v --source-maps
+          flutter build web --release --base-href "/${GITHUB_REPOSITORY#*/}/"
           dart ./scripts/patch_web_build.dart
 
-      - name: Publish to app repo ${{ steps.extract-branch-name.outputs.BRANCH_NAME }} branch
-        uses: crazy-max/ghaction-github-pages@v5
+      - uses: actions/upload-pages-artifact@v3
         with:
-          repo: chaldea-center/app
-          target_branch: ${{ steps.extract-branch-name.outputs.BRANCH_NAME }}
-          build_dir: build/web
-        env:
-          GH_PAT: ${{ secrets.GH_PAGES_TOKEN }}
+          path: build/web
 
-      - uses: yizhoumo/setup-ossutil@v2
-        if: github.ref == 'refs/heads/main'
-        with:
-          ossutil-version: "1.7.18"
-          endpoint: ${{ secrets.OSS_ENDPOINT }}
-          access-key-id: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          access-key-secret: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-
-      - name: Publish to OSS
-        if: github.ref == 'refs/heads/main'
-        run: dart ./scripts/publish_oss.dart ${{ secrets.OSS_BUCKET_NAME }}
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
