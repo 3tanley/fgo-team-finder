@@ -11,6 +11,16 @@ bool isDamageDealer(int svtId) =>
     ) ??
     false;
 
+/// The NP card of a servant's first noble phantasm as Arts / Buster / Quick, or null for anything else.
+CardType? npCardType(int svtId) {
+  final card = db.gameData.servantsById[svtId]?.groupedNoblePhantasms[1]?.lastOrNull?.card;
+  if (card == null) return null;
+  if (CardType.isArts(card)) return CardType.arts;
+  if (CardType.isBuster(card)) return CardType.buster;
+  if (CardType.isQuick(card)) return CardType.quick;
+  return null;
+}
+
 bool _sameSetup(ServantSetup a, ServantSetup b) =>
     a.svtId == b.svtId &&
     a.level == b.level &&
@@ -19,7 +29,8 @@ bool _sameSetup(ServantSetup a, ServantSetup b) =>
     a.hpFou == b.hpFou &&
     a.skillLevels.join(',') == b.skillLevels.join(',');
 
-/// Teams for the owner's loop: the borrowed support in slot 0 (carrying its bond CE), every pair of box
+/// Teams for the owner's loop: the borrowed support in slot 0 (carrying its bond CE; which support depends on
+/// the damage dealer's NP card, see [kSupportCollectionNosByCard]), every pair of box
 /// servants in slots 1-2 with Black Grail on whichever of the pair has a damaging NP (one team per holder),
 /// and, in slot 3, a swap-in for the final wave: a box servant from the named supports that is not in the
 /// front. One team per distinct swap-in servant; with none available the team has no back row. Every team
@@ -39,6 +50,8 @@ Iterable<TeamSpec> generateTeams(List<ServantSetup> box, Region region) sync* {
         }
         for (final holder in [i, j]) {
           if (!isDamageDealer(box[holder].svtId)) continue;
+          final card = npCardType(box[holder].svtId);
+          if (card == null || !supportFitsCard(support.svtId, card)) continue; // support depends on the NP card
           if (holder == j && _sameSetup(box[i], box[j])) continue; // same team as holder == i
           final front = [
             supportSlot,

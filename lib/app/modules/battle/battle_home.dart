@@ -8,6 +8,7 @@ import 'package:chaldea/widgets/widgets.dart';
 import '../../../packages/language.dart';
 import '../home/elements/random_image.dart';
 import '../home/subpage/feedback_page.dart';
+import '../team_finder/team_finder_page.dart';
 import 'formation/formation_storage.dart';
 import 'teams/favorite_teams_page.dart';
 import 'teams/teams_query_page.dart';
@@ -67,6 +68,14 @@ class BattleHomePage extends StatelessWidget {
               title: Text(S.current.np_damage),
               onTap: () {
                 router.push(url: Routes.laplaceNpDmg);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.groups),
+              title: const Text('Team Finder'),
+              subtitle: const Text('Search your servants for teams that clear a quest in 3 turns'),
+              onTap: () {
+                router.pushPage(const TeamFinderPage());
               },
             ),
           ],

@@ -7,6 +7,21 @@ import 'models.dart';
 /// shortcut: only the owner's named supports; add others once each is checked against a real loop.
 const List<int> kSupportCollectionNos = [284, 314, 334, 316, 307, 215, 357, 470];
 
+/// Which borrowed support goes with a damage dealer's NP card (the owner's rule): Arts -> Castoria or Urðr,
+/// Quick -> Scáthach-Skadi or Scáthach-Skadi (Ruler, "Summer Skadi"), Buster -> Koyanskaya of Light or of Dark.
+/// Oberon and Miss Crane are in [kSupportCollectionNos] but fit no card, so they are never the borrowed support
+/// (Oberon is still the final-wave swap-in).
+/// shortcut: "Koyanskaya" is read as both Light and Dark; narrow it here if only one is meant.
+const Map<CardType, List<int>> kSupportCollectionNosByCard = {
+  CardType.arts: [284, 470],
+  CardType.quick: [215, 357],
+  CardType.buster: [314, 334],
+};
+
+/// True if [supportSvtId] is a borrowed support the owner pairs with a damage dealer whose NP card is [card].
+bool supportFitsCard(int supportSvtId, CardType card) =>
+    kSupportCollectionNosByCard[card]?.any((no) => db.gameData.servantsNoDup[no]?.id == supportSvtId) ?? false;
+
 /// Supports available in [region]: JP has everything, other regions only released servants.
 /// Servants without a bond CE are skipped, because the support must carry one.
 List<SupportEntry> supportList(Region region) {
