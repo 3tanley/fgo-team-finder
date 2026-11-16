@@ -5,7 +5,7 @@ var self=this||{};try{self.WeakRef=WeakRef,self.FinalizationGroup=FinalizationGr
 {{flutter_js}}
 {{flutter_build_config}}
 
-_flutter.buildConfig.builds[0].mainJsPath = "/main.dart.js?v=MAIN_DART_JS_VERSION";
+_flutter.buildConfig.builds[0].mainJsPath = "main.dart.js?v=MAIN_DART_JS_VERSION";
 
 const _host = window.location.hostname.toLowerCase();
 window.isCNHost =
@@ -46,7 +46,7 @@ window.isCNHost =
   // console.log("Google font base url: "+ fontFallbackBaseUrl)
 
   const userConfig = {
-    canvasKitBaseUrl: "/canvaskit/",
+    canvasKitBaseUrl: "canvaskit/",
     renderer: "canvaskit",
     fontFallbackBaseUrl,
   };

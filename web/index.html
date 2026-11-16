@@ -4,7 +4,7 @@
     <base href="$FLUTTER_BASE_HREF" />
 
     <meta charset="UTF-8" />
-    <title>Chaldea</title>
+    <title>FGO Team Finder</title>
     <meta name="description" content="Chaldea - Yet Another Planner & Battle Simulator for Fate/GO" />
     <meta
       name="keyword"
@@ -22,63 +22,24 @@
     <link rel="icon" type="image/png" href="favicon.png" />
 
     <!-- social graph -->
-    <meta property="og:site_name" content="Chaldea" />
-    <meta property="og:title" content="Chaldea" />
+    <meta property="og:site_name" content="FGO Team Finder" />
+    <meta property="og:title" content="FGO Team Finder" />
     <meta property="og:type" content="website" />
-    <meta property="og:url" content="https://chaldea.center" />
-    <meta property="og:image" content="https://chaldea.center/icons/Icon-192.png" />
-    <meta property="og:image:type" content="image/png" />
-    <meta property="og:image:width" content="300" />
-    <meta property="og:image:height" content="300" />
-    <meta property="og:image:alt" content="Chaldea Logo" />
-    <meta property="og:description" content="Chaldea - Yet Another Planner & Battle Simulator for Fate/GO" />
+    <meta property="og:description" content="FGO Team Finder - unofficial fork of Chaldea" />
 
     <link rel="manifest" href="manifest.json" />
 
-    <link rel="stylesheet" type="text/css" href="/css/style.css" />
+    <link rel="stylesheet" type="text/css" href="css/style.css" />
 
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 
-    <!-- analyzers -->
-    <!-- Cloudflare Web Analytics -->
-    <script
-      defer
-      src="https://static.cloudflareinsights.com/beacon.min.js"
-      data-cf-beacon='{"token": "467d575c5813481eaebaa9566fd3d78a"}'
-    ></script>
-    <!-- Baidu -->
-    <script>
-      var _hmt = _hmt || [];
-      (function () {
-        var hm = document.createElement("script");
-        hm.src = "https://hm.baidu.com/hm.js?ddeb4cb9b5c01c98405c3bf11b9c9c34";
-        var s = document.getElementsByTagName("script")[0];
-        s.parentNode.insertBefore(hm, s);
-      })();
-    </script>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-XS2D05TGKG"></script>
-    <script>
-      window.dataLayer = window.dataLayer || [];
-      function gtag() {
-        dataLayer.push(arguments);
-      }
-      gtag("js", new Date());
-
-      gtag("config", "G-XS2D05TGKG");
-    </script>
-    <!-- AdSense -->
-    <meta name="google-adsense-account" content="ca-pub-1170355046794925">
-    <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1170355046794925"
-    crossorigin="anonymous"></script>
-    <script async custom-element="amp-ad" src="https://cdn.ampproject.org/v0/amp-ad-0.1.js"></script>
-    <!-- end analyzers -->
+    <!-- fork: upstream's analytics and ad tags removed -->
   </head>
   <body>
     <noscript> You need to enable JavaScript to run this app. </noscript>
 
     <div class="splash-container">
-      <img class="logo" src="/assets/res/img/launcher_icon/app_icon_rounded.png" alt="Chaldea Logo" />
+      <img class="logo" src="assets/res/img/launcher_icon/app_icon_rounded.png" alt="Chaldea Logo" />
       <h1>Chaldea</h1>
       <!-- for bots -->
       <div style="display: none">
@@ -88,10 +49,10 @@
       </div>
       <p id="loading-message">Starting...</p>
       <div class="loading-container">
-        <img class="fou f1" src="/assets/res/img/load_icon_A01.png" alt="Loading" />
-        <img class="fou f2" src="/assets/res/img/load_icon_A02.png" alt="Loading" />
-        <img class="fou f3" src="/assets/res/img/load_icon_A03.png" alt="Loading" />
-        <img class="fou f4" src="/assets/res/img/load_icon_A04.png" alt="Loading" />
+        <img class="fou f1" src="assets/res/img/load_icon_A01.png" alt="Loading" />
+        <img class="fou f2" src="assets/res/img/load_icon_A02.png" alt="Loading" />
+        <img class="fou f3" src="assets/res/img/load_icon_A03.png" alt="Loading" />
+        <img class="fou f4" src="assets/res/img/load_icon_A04.png" alt="Loading" />
       </div>
       <a class="button" href="https://docs.chaldea.center" target="_blank">Visit Document Site</a>
     </div>

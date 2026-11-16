@@ -10,11 +10,15 @@ import '../app_info.dart';
 import '../language.dart';
 import 'analysis.dart';
 
+/// Fork: never send usage data to upstream's Countly server.
+const _kTelemetryOff = true;
+
 class AppAnalysisImpl implements AppAnalysis {
   bool _initiated = false;
 
   @override
   Future<void> initiate() async {
+    if (_kTelemetryOff) return;
     final isInitialized = await Countly.isInitialized();
     if (!isInitialized) {
       CountlyConfig config = CountlyConfig(
