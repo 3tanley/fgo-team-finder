@@ -59,10 +59,7 @@ void main() async {
             ((p.cardBuff - p.cardResist + 1000) / 1000) *
             1.1 *
             (p.classAdvantage / 1000) *
-            attributeAdvantage(
-              p.attackerAttribute,
-              p.defenderAttribute,
-            ) *
+            attributeAdvantage(p.attackerAttribute, p.defenderAttribute) *
             (p.random / 1000) *
             ((p.attackBuff - p.defenseBuff + 1000) / 1000) *
             ((1000 + p.damageBuff - p.damageDefBuff + p.npDamageBuff - p.npDamageDefBuff) / 1000) +

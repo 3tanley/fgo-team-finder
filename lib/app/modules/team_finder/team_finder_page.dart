@@ -227,7 +227,10 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
           children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Align(alignment: Alignment.centerLeft, child: SelectableText(describeLog(r.log, r.team).join('\n'))),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: SelectableText(describeLog(r.log, r.team).join('\n')),
+              ),
             ),
           ],
         ),
