@@ -2,9 +2,11 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import 'package:chaldea/app/api/atlas.dart';
 import 'package:chaldea/app/app.dart';
+import 'package:chaldea/app/modules/servant/servant.dart';
 import 'package:chaldea/app/modules/servant/servant_list.dart';
 import 'package:chaldea/app/team_finder/labels.dart';
 import 'package:chaldea/app/team_finder/models.dart';
+import 'package:chaldea/app/team_finder/owned.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
 import 'package:chaldea/generated/l10n.dart';
@@ -14,7 +16,8 @@ import 'package:chaldea/widgets/widgets.dart';
 
 import 'team_finder_controller.dart';
 
-/// Pick a quest and the servants you own; find the teams that clear it in 3 turns, best NP damage first.
+/// Pick a quest and the servants you own (from Chaldea's own servant data); find the teams that clear it in 3 turns,
+/// best NP damage first.
 /// Text is English only for now (shortcut: add l10n entries before shipping to other languages).
 class TeamFinderPage extends StatefulWidget {
   final TeamFinderController? controller;
@@ -24,14 +27,20 @@ class TeamFinderPage extends StatefulWidget {
   State<TeamFinderPage> createState() => _TeamFinderPageState();
 }
 
-class _TeamFinderPageState extends State<TeamFinderPage> {
-  late final TeamFinderController c = widget.controller ?? TeamFinderController(persist: true);
+class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProviderStateMixin {
+  late final TeamFinderController c =
+      widget.controller ?? TeamFinderController(persist: true, ownedSetup: ownedSetupFor);
+  late final TabController _tabs = TabController(length: 2, vsync: this);
 
   @override
   void initState() {
     super.initState();
     c.addListener(_rebuild);
     if (widget.controller == null) c.load();
+    // coming back to the first tab: show the servants with their current Chaldea stats
+    _tabs.addListener(() {
+      if (!_tabs.indexIsChanging && _tabs.index == 0) c.refreshOwned();
+    });
   }
 
   void _rebuild() {
@@ -41,6 +50,7 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
   @override
   void dispose() {
     c.removeListener(_rebuild);
+    _tabs.dispose();
     c.cancel();
     if (widget.controller == null) c.dispose();
     super.dispose();
@@ -92,15 +102,99 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
   void _addServant() {
     router.pushPage(
       ServantListPage(
+        // the most common supports pinned in a row at the top, like Laplace's servant selector
+        pinged: commonSupportIds(c.region),
+        showSecondaryFilter: true,
         onSelected: (svt) {
           if (svt.rarity < 4) {
             EasyLoading.showError('Only 4★ and 5★ servants are used for now');
             return;
           }
-          _editServant(c.box[svt.id] ?? ServantSetup.defaults(svt.id));
+          _editServant(c.box[svt.id] ?? ownedSetupFor(svt.id) ?? ServantSetup.defaults(svt.id));
         },
       ),
     );
+  }
+
+  static String _statLine(ServantSetup s) =>
+      'Lv${s.level} · ${s.skillLevels.join('/')} · NP${s.npLevel} · fou ${s.atkFou}/${s.hpFou}'
+      '${s.appendLevels.any((e) => e > 0) ? ' · append ${s.appendLevels.join('/')}' : ''}';
+
+  /// Opens Chaldea's own servant page (Plan tab: ascension, skills, append skills, grails, fou) and re-reads the stats after.
+  Future<void> _openDetail(int svtId) async {
+    final svt = db.gameData.servantsById[svtId];
+    if (svt == null) return;
+    await router.pushPage(ServantDetailPage(id: svt.id, svt: svt), detail: true);
+    if (mounted) {
+      c.refreshOwned();
+      setState(() {});
+    }
+  }
+
+  void _toggleOwned(Servant svt) {
+    if (c.box.containsKey(svt.id)) {
+      c.removeServant(svt.id);
+    } else {
+      final setup = ownedSetupFor(svt.id);
+      if (setup != null) c.upsertServant(setup);
+    }
+  }
+
+  /// The servants the user marked as owned in Chaldea, to tick the ones to use.
+  Widget _ownedTab() {
+    return db.onUserData((context, snapshot) {
+      final owned = ownedServants(c.region);
+      return ListView(
+        padding: const EdgeInsets.only(bottom: 32),
+        children: [
+          ListTile(
+            title: const Text('Servants you own'),
+            subtitle: const Text(
+              'Servants marked as owned (heart) in Chaldea, with the stats from their Plan. '
+              'Tick the ones to use; the info button opens the servant page to edit their stats.',
+            ),
+            trailing: OutlinedButton.icon(
+              onPressed: _addServant,
+              icon: const Icon(Icons.add),
+              label: const Text('Add other'),
+            ),
+          ),
+          if (owned.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'No owned servants yet. Mark servants as owned (heart) on their servant page and set their stats '
+                    'in the Plan tab, or use Add other for one you want to try.',
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.tonal(
+                    onPressed: () => router.pushPage(ServantListPage(), detail: true),
+                    child: const Text('Open servant list'),
+                  ),
+                ],
+              ),
+            ),
+          for (final svt in owned)
+            ListTile(
+              dense: true,
+              leading: svt.iconBuilder(context: context, width: 40, jumpToDetail: false),
+              title: Text(_svtName(svt.id)),
+              subtitle: Text(_statLine(ownedSetupFor(svt.id)!)), // always Chaldea's current stats
+              onTap: () => _toggleOwned(svt),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Checkbox(value: c.box.containsKey(svt.id), onChanged: (_) => _toggleOwned(svt)),
+                  IconButton(icon: const Icon(Icons.info_outline), onPressed: () => _openDetail(svt.id)),
+                ],
+              ),
+            ),
+        ],
+      );
+    });
   }
 
   Future<void> _editServant(ServantSetup current) async {
@@ -116,72 +210,84 @@ class _TeamFinderPageState extends State<TeamFinderPage> {
     final p = c.progress;
     final blocker = c.blocker;
     return Scaffold(
-      appBar: AppBar(title: const Text('Team Finder')),
-      body: ListView(
-        padding: const EdgeInsets.only(bottom: 32),
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: SegmentedButton<Region>(
-              segments: const [
-                ButtonSegment(value: Region.na, label: Text('NA')),
-                ButtonSegment(value: Region.jp, label: Text('JP')),
-              ],
-              selected: {c.region},
-              onSelectionChanged: (s) => c.setRegion(s.single),
-            ),
-          ),
-          ListTile(
-            title: const Text('Quest'),
-            subtitle: Text(
-              c.quest == null
-                  ? 'Not selected'
-                  : '${c.questLabel}\n${c.quest!.waves.length} waves'
-                        '${c.quest!.unsupportedGimmicks.isEmpty ? '' : ' · unverified: ${c.quest!.unsupportedGimmicks.join(', ')}'}',
-            ),
-            trailing: TextButton(onPressed: _pickQuest, child: const Text('Choose')),
-          ),
-          const Divider(),
-          ListTile(
-            title: Text('Your servants (${c.box.length})'),
-            subtitle: const Text(
-              '4★ and 5★ only. Blank fields default to level 90, skills 10/10/10, NP level 1, fou 1000.',
-            ),
-            trailing: FilledButton.icon(onPressed: _addServant, icon: const Icon(Icons.add), label: const Text('Add')),
-          ),
-          for (final s in c.box.values)
-            ListTile(
-              dense: true,
-              leading: db.gameData.servantsById[s.svtId]?.iconBuilder(context: context, width: 40, jumpToDetail: false),
-              title: Text(_svtName(s.svtId)),
-              subtitle: Text(
-                'Lv${s.level} · ${s.skillLevels.join('/')} · NP${s.npLevel} · fou ${s.atkFou}/${s.hpFou}'
-                '${s.appendLevels.any((e) => e > 0) ? ' · append ${s.appendLevels.join('/')}' : ''}',
-              ),
-              onTap: () => _editServant(s),
-              trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => c.removeServant(s.svtId)),
-            ),
-          const Divider(),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Row(
-              children: [
-                FilledButton(onPressed: blocker == null && !c.searching ? c.search : null, child: const Text('Search')),
-                const SizedBox(width: 12),
-                if (c.searching) OutlinedButton(onPressed: c.cancel, child: const Text('Cancel')),
-              ],
-            ),
-          ),
-          if (blocker != null && !c.searching)
-            Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Text(blocker)),
-          if (c.error != null)
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: Text(c.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
-            ),
-          if (p != null) ..._results(p),
-        ],
+      appBar: AppBar(
+        title: const Text('Team Finder'),
+        bottom: TabBar(
+          controller: _tabs,
+          tabs: const [
+            Tab(text: 'Find teams'),
+            Tab(text: 'Owned servants'),
+          ],
+        ),
       ),
+      body: TabBarView(controller: _tabs, children: [_findTab(p, blocker), _ownedTab()]),
+    );
+  }
+
+  Widget _findTab(SolveProgress? p, String? blocker) {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(16),
+          child: SegmentedButton<Region>(
+            segments: const [
+              ButtonSegment(value: Region.na, label: Text('NA')),
+              ButtonSegment(value: Region.jp, label: Text('JP')),
+            ],
+            selected: {c.region},
+            onSelectionChanged: (s) => c.setRegion(s.single),
+          ),
+        ),
+        ListTile(
+          title: const Text('Quest'),
+          subtitle: Text(
+            c.quest == null
+                ? 'Not selected'
+                : '${c.questLabel}\n${c.quest!.waves.length} waves'
+                      '${c.quest!.unsupportedGimmicks.isEmpty ? '' : ' · unverified: ${c.quest!.unsupportedGimmicks.join(', ')}'}',
+          ),
+          trailing: TextButton(onPressed: _pickQuest, child: const Text('Choose')),
+        ),
+        const Divider(),
+        ListTile(
+          title: Text('Servants used (${c.box.length})'),
+          subtitle: const Text(
+            'Pick them in the Owned servants tab: their stats come from your Chaldea servant data. '
+            'Servants added by hand: blank fields default to level 90, skills 10/10/10, NP level 1, fou 1000.',
+          ),
+          trailing: FilledButton.tonal(onPressed: () => _tabs.animateTo(1), child: const Text('Select servants')),
+        ),
+        for (final s in c.box.values)
+          ListTile(
+            dense: true,
+            leading: db.gameData.servantsById[s.svtId]?.iconBuilder(context: context, width: 40, jumpToDetail: false),
+            title: Text(_svtName(s.svtId)),
+            subtitle: Text(_statLine(s)),
+            // an owned servant is edited where Chaldea keeps its stats; one added by hand has its own dialog
+            onTap: () => ownedSetupFor(s.svtId) != null ? _openDetail(s.svtId) : _editServant(s),
+            trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => c.removeServant(s.svtId)),
+          ),
+        const Divider(),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              FilledButton(onPressed: blocker == null && !c.searching ? c.search : null, child: const Text('Search')),
+              const SizedBox(width: 12),
+              if (c.searching) OutlinedButton(onPressed: c.cancel, child: const Text('Cancel')),
+            ],
+          ),
+        ),
+        if (blocker != null && !c.searching)
+          Padding(padding: const EdgeInsets.fromLTRB(16, 8, 16, 0), child: Text(blocker)),
+        if (c.error != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+            child: Text(c.error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ),
+        if (p != null) ..._results(p),
+      ],
     );
   }
 

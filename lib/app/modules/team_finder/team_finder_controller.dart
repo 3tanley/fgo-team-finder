@@ -11,11 +11,16 @@ import 'package:chaldea/models/models.dart' show Region;
 
 /// State and actions behind the Team Finder page. No widgets in here so it can be tested and reused by a website.
 class TeamFinderController extends ChangeNotifier {
-  TeamFinderController({BattleRunner? runner, this.persist = false}) : runner = runner ?? EngineBattleRunner();
+  TeamFinderController({BattleRunner? runner, this.persist = false, this.ownedSetup})
+    : runner = runner ?? EngineBattleRunner();
 
   static const _prefsKey = 'team_finder_box_v1';
 
   final BattleRunner runner;
+
+  /// What Chaldea's own data says about an owned servant (its Plan stats), or null if it is not owned.
+  /// Box servants that are owned are re-read from it before every search, so edits made in Chaldea count.
+  final ServantSetup? Function(int svtId)? ownedSetup;
 
   /// Save the box to local storage on every change (the page turns this on; tests leave it off).
   final bool persist;
@@ -60,7 +65,28 @@ class TeamFinderController extends ChangeNotifier {
     _changedBox();
   }
 
+  /// Re-reads every owned servant in the box from Chaldea's data; others (added by hand) are left alone.
+  /// Returns true if any setup changed.
+  bool refreshOwned() {
+    final provider = ownedSetup;
+    if (provider == null) return false;
+    var changed = false;
+    for (final id in box.keys.toList()) {
+      final fresh = provider(id);
+      if (fresh != null && !fresh.sameAs(box[id]!)) {
+        box[id] = fresh;
+        changed = true;
+      }
+    }
+    if (changed) {
+      if (persist) _save();
+      notifyListeners();
+    }
+    return changed;
+  }
+
   Future<void> search() async {
+    refreshOwned();
     final b = blocker;
     if (b != null) {
       error = b;

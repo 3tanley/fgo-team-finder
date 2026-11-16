@@ -38,6 +38,34 @@ void main() async {
     expect(controller(servants: 2).blocker, isNull);
   });
 
+  TeamFinderController ownedController(ServantSetup? Function(int svtId) ownedSetup) {
+    final c = TeamFinderController(runner: _FakeRunner(), ownedSetup: ownedSetup);
+    for (final id in ids) {
+      c.upsertServant(ServantSetup.defaults(id));
+    }
+    c.setQuest(quest, 'test quest');
+    return c;
+  }
+
+  test('search first re-reads owned servants from Chaldea data and leaves the others alone', () async {
+    final c = ownedController((id) => id == 100100 ? ServantSetup(svtId: 100100, level: 77, npLevel: 4) : null);
+    await c.search();
+    expect(c.box[100100]!.level, 77);
+    expect(c.box[100100]!.npLevel, 4);
+    expect(c.box[504500]!.level, 90); // not owned (provider returned null): untouched
+    expect(c.progress!.finished, isTrue);
+  });
+
+  test('refreshOwned says whether anything changed', () {
+    var level = 80;
+    final c = ownedController((id) => id == 100100 ? ServantSetup(svtId: 100100, level: level) : null);
+    expect(c.refreshOwned(), isTrue); // 90 -> 80
+    expect(c.refreshOwned(), isFalse); // same again
+    level = 81;
+    expect(c.refreshOwned(), isTrue);
+    expect(c.box[100100]!.level, 81);
+  });
+
   test('without a quest the search is blocked and asks for one', () {
     expect(controller(withQuest: false).blocker, contains('quest'));
   });

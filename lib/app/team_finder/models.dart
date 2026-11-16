@@ -36,6 +36,16 @@ class ServantSetup {
   }
 
   factory ServantSetup.defaults(int svtId) => ServantSetup(svtId: svtId);
+
+  /// True if every stat is the same (two such box entries make equivalent teams).
+  bool sameAs(ServantSetup o) =>
+      svtId == o.svtId &&
+      level == o.level &&
+      npLevel == o.npLevel &&
+      atkFou == o.atkFou &&
+      hpFou == o.hpFou &&
+      skillLevels.join(',') == o.skillLevels.join(',') &&
+      appendLevels.join(',') == o.appendLevels.join(',');
 }
 
 class CeSetup {

@@ -21,15 +21,6 @@ CardType? npCardType(int svtId) {
   return null;
 }
 
-bool _sameSetup(ServantSetup a, ServantSetup b) =>
-    a.svtId == b.svtId &&
-    a.level == b.level &&
-    a.npLevel == b.npLevel &&
-    a.atkFou == b.atkFou &&
-    a.hpFou == b.hpFou &&
-    a.skillLevels.join(',') == b.skillLevels.join(',') &&
-    a.appendLevels.join(',') == b.appendLevels.join(',');
-
 /// Teams for the owner's loop: the borrowed support in slot 0 (carrying its bond CE; which support depends on
 /// the damage dealer's NP card, see [kSupportCollectionNosByCard]), every pair of box
 /// servants in slots 1-2 with Black Grail on whichever of the pair has a damaging NP (one team per holder),
@@ -53,7 +44,7 @@ Iterable<TeamSpec> generateTeams(List<ServantSetup> box, Region region) sync* {
           if (!isDamageDealer(box[holder].svtId)) continue;
           final card = npCardType(box[holder].svtId);
           if (card == null || !supportFitsCard(support.svtId, card)) continue; // support depends on the NP card
-          if (holder == j && _sameSetup(box[i], box[j])) continue; // same team as holder == i
+          if (holder == j && box[i].sameAs(box[j])) continue; // same team as holder == i
           final front = [
             supportSlot,
             SlotSpec(box[i], ce: holder == i ? CeSetup(kBlackGrailCeId) : null),

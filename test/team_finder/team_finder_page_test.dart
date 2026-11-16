@@ -97,6 +97,79 @@ void main() async {
     expect(find.textContaining('Loop rules used'), findsOneWidget);
   });
 
+  group('owned servants tab', () {
+    setUp(() => db.curUser.servants.clear());
+    tearDown(() => db.curUser.servants.clear());
+
+    void own(int collectionNo, {void Function(SvtPlan cur)? edit}) {
+      final cur = db.gameData.servantsNoDup[collectionNo]!.status.cur..favorite = true;
+      edit?.call(cur);
+    }
+
+    Future<TeamFinderController> openOwnedTab(WidgetTester tester) async {
+      final c = await pump(tester);
+      await tester.tap(find.text('Owned servants'));
+      await tester.pumpAndSettle();
+      return c;
+    }
+
+    testWidgets('the page has two tabs, Find teams first', (tester) async {
+      await pump(tester);
+      expect(find.widgetWithText(Tab, 'Find teams'), findsOneWidget);
+      expect(find.widgetWithText(Tab, 'Owned servants'), findsOneWidget);
+      expect(find.text('Need at least 2 servants (you have 0)'), findsOneWidget); // the Find teams tab is showing
+    });
+
+    testWidgets('with nothing marked as owned it says so instead of asking for servants one by one', (tester) async {
+      await openOwnedTab(tester);
+      expect(find.textContaining('No owned servants yet'), findsOneWidget);
+      expect(find.byType(Checkbox), findsNothing);
+    });
+
+    testWidgets('owned 4-5 star servants are listed with their Chaldea stats; tapping selects and unselects', (
+      tester,
+    ) async {
+      own(
+        284,
+        edit: (c) {
+          c.ascension = 4;
+          c.skills = [10, 9, 8];
+          c.npLv = 3;
+        },
+      );
+      own(355, edit: (c) => c.ascension = 4);
+      final c = await openOwnedTab(tester);
+      expect(find.byType(Checkbox), findsNWidgets(2));
+      expect(find.text('Altria Caster (Caster)'), findsOneWidget);
+      expect(find.textContaining('Lv90 · 10/9/8 · NP3'), findsOneWidget);
+
+      await tester.tap(find.text('Altria Caster (Caster)'));
+      await tester.pumpAndSettle();
+      final s = c.box[504500]!;
+      expect(s.skillLevels, [10, 9, 8]);
+      expect(s.npLevel, 3);
+      expect(tester.widgetList<Checkbox>(find.byType(Checkbox)).where((e) => e.value == true).length, 1);
+
+      await tester.tap(find.text('Altria Caster (Caster)'));
+      await tester.pumpAndSettle();
+      expect(c.box.containsKey(504500), isFalse);
+    });
+
+    testWidgets('selected servants show up in the Find teams tab and count towards the minimum', (tester) async {
+      own(284);
+      own(355);
+      final c = await openOwnedTab(tester);
+      await tester.tap(find.text('Altria Caster (Caster)'));
+      await tester.tap(find.text('Ibuki-Douji (Berserker)'));
+      await tester.pumpAndSettle();
+      expect(c.box.length, 2);
+      await tester.tap(find.text('Find teams'));
+      await tester.pumpAndSettle();
+      expect(find.text('Pick a quest first'), findsOneWidget); // 2 servants are enough; only the quest is missing
+      expect(find.textContaining('Servants used (2)'), findsOneWidget);
+    });
+  });
+
   testWidgets('the edit dialog has five append fields that default to 0 and save what the user types', (tester) async {
     final c = await pump(tester, servants: 5);
     await tester.tap(find.text('Altria Pendragon (Saber)'));
