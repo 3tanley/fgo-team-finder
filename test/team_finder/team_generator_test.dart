@@ -213,4 +213,64 @@ void main() async {
       expect(supportsOf(teams), isNot(contains(idOf(307))));
     });
   });
+
+  group('friend support chosen by the user', () {
+    test('only the chosen friends are borrowed, with their own stats and their bond CE', () {
+      final friend = ServantSetup(svtId: castoria, level: 100, skillLevels: [10, 10, 10]);
+      final teams = generateTeams(box([summerIbuki, castoria]), Region.na, friends: [friend]).toList();
+      expect(teams, isNotEmpty);
+      for (final t in teams) {
+        expect(t.slots[0].servant, same(friend)); // not the default stats
+        expect(t.slots[0].ce?.ceId, db.gameData.servantsById[castoria]!.bondEquips.first);
+      }
+    });
+
+    test('the friend may be the same servant as one in the box (a second Altria Caster)', () {
+      final teams = generateTeams(
+        box([summerIbuki, castoria]),
+        Region.na,
+        friends: [ServantSetup.defaults(castoria)],
+      ).toList();
+      expect(teams.length, 1); // Ibuki + own Castoria in front, friend Castoria borrowed
+      expect(teams.single.slots.map((s) => s.servant.svtId), [castoria, summerIbuki, castoria]);
+    });
+
+    test('the NP card rule is not applied to a friend the user picked', () {
+      final busterDealer = dealerWith(CardType.buster);
+      expect(supportFitsCard(castoria, CardType.buster), isFalse);
+      final teams = generateTeams(
+        box([busterDealer, daVinci]),
+        Region.na,
+        friends: [ServantSetup.defaults(castoria)],
+      ).toList();
+      expect(teams, isNotEmpty);
+      expect(supportsOf(teams), {castoria});
+    });
+
+    test('several friends: every one is tried as the borrowed support', () {
+      final teams = generateTeams(
+        box([summerIbuki, castoria]),
+        Region.na,
+        friends: [ServantSetup.defaults(castoria), ServantSetup.defaults(idOf(470))],
+      ).toList();
+      expect(supportsOf(teams), {castoria, idOf(470)});
+    });
+
+    test('a friend from a servant that has no bond CE is borrowed without one', () {
+      final noBond = db.gameData.servantsNoDup.values.firstWhere((s) => s.rarity >= 4 && s.bondEquips.isEmpty);
+      final teams = generateTeams(
+        box([summerIbuki, castoria]),
+        Region.na,
+        friends: [ServantSetup.defaults(noBond.id)],
+      ).toList();
+      expect(teams, isNotEmpty);
+      expect(teams.every((t) => t.slots[0].ce == null), isTrue);
+    });
+
+    test('with no friends chosen the usual card-based supports are used', () {
+      final auto = generateTeams(box([summerIbuki, castoria]), Region.na).toList();
+      expect(supportsOf(auto), {castoria}); // Arts dealer: Castoria (Urðr is not released in NA)
+      expect(generateTeams(box([summerIbuki, castoria]), Region.na, friends: const []).length, auto.length);
+    });
+  });
 }

@@ -27,12 +27,25 @@ CardType? npCardType(int svtId) {
 /// and, in slot 3, a swap-in for the final wave: a box servant from the named supports that is not in the
 /// front. One team per distinct swap-in servant; with none available the team has no back row. Every team
 /// carries the Decisive-Battle Chaldea Uniform at level 10.
+/// With [friends] (supports the user chose) those are borrowed instead, with their own stats and bond CE, and the
+/// NP card rule is not applied: the choice is the user's.
 /// shortcut: one slot order (support first, box order after); when a swap-in exists, teams without it are
 /// not generated (the swap only adds skills on the last wave).
-Iterable<TeamSpec> generateTeams(List<ServantSetup> box, Region region) sync* {
+Iterable<TeamSpec> generateTeams(List<ServantSetup> box, Region region, {List<ServantSetup> friends = const []}) sync* {
   final mysticCode = MysticCodeSetup(kDefaultMysticCodeId);
-  for (final support in supportList(region)) {
-    final supportSlot = SlotSpec(ServantSetup.defaults(support.svtId), ce: CeSetup(support.bondCeId));
+  final supports = friends.isEmpty
+      ? [for (final e in supportList(region)) SlotSpec(ServantSetup.defaults(e.svtId), ce: CeSetup(e.bondCeId))]
+      : [
+          for (final f in friends)
+            SlotSpec(
+              f,
+              ce: switch (db.gameData.servantsById[f.svtId]?.bondEquips.firstOrNull) {
+                final ce? => CeSetup(ce),
+                null => null, // no bond CE to carry
+              },
+            ),
+        ];
+  for (final supportSlot in supports) {
     for (var i = 0; i < box.length; i++) {
       for (var j = i + 1; j < box.length; j++) {
         final swapIns = <ServantSetup>[];
@@ -43,7 +56,9 @@ Iterable<TeamSpec> generateTeams(List<ServantSetup> box, Region region) sync* {
         for (final holder in [i, j]) {
           if (!isDamageDealer(box[holder].svtId)) continue;
           final card = npCardType(box[holder].svtId);
-          if (card == null || !supportFitsCard(support.svtId, card)) continue; // support depends on the NP card
+          if (card == null) continue;
+          // the borrowed support depends on the NP card, unless the user chose it
+          if (friends.isEmpty && !supportFitsCard(supportSlot.servant.svtId, card)) continue;
           if (holder == j && box[i].sameAs(box[j])) continue; // same team as holder == i
           final front = [
             supportSlot,

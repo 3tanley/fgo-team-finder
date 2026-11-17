@@ -170,6 +170,78 @@ void main() async {
     });
   });
 
+  group('friend support tab', () {
+    Future<void> openFriendTab(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(Tab, 'Friend support'));
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('a third tab, Friend support; with none chosen both tabs say the usual supports are used', (
+      tester,
+    ) async {
+      await pump(tester);
+      expect(find.widgetWithText(Tab, 'Friend support'), findsOneWidget);
+      expect(find.textContaining('Automatic'), findsOneWidget); // Find teams tab summary
+      await openFriendTab(tester);
+      expect(find.textContaining('No friend support chosen'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Add support'), findsOneWidget);
+    });
+
+    testWidgets('a chosen friend is listed in both tabs, can be changed and can be removed', (tester) async {
+      final c = await pump(tester, servants: 2, withQuest: true);
+      c.upsertFriend(ServantSetup(svtId: 504500, level: 100, skillLevels: [10, 10, 10]));
+      await tester.pumpAndSettle();
+      expect(find.text('Friend support: Altria Caster (Caster)'), findsOneWidget); // Find teams tab
+      expect(find.textContaining('Automatic'), findsNothing);
+      await openFriendTab(tester);
+      expect(find.text('Altria Caster (Caster)'), findsOneWidget);
+      expect(find.textContaining('Lv100 · 10/10/10'), findsOneWidget);
+
+      await tester.tap(find.text('Altria Caster (Caster)')); // tap = change its stats
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Level'), '90');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(c.friends[504500]!.level, 90);
+
+      await openFriendTab(tester);
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(c.friends, isEmpty);
+      expect(find.textContaining('No friend support chosen'), findsOneWidget);
+    });
+
+    testWidgets('pressing OK in a friend\'s stats dialog goes to Find teams and checks the team compositions', (
+      tester,
+    ) async {
+      final c = await pump(tester, servants: 2, withQuest: true);
+      c.upsertFriend(ServantSetup.defaults(504500)); // what the picker does before the stats dialog
+      await tester.pumpAndSettle();
+      await openFriendTab(tester);
+      await tester.tap(find.text('Altria Caster (Caster)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(c.progress?.finished, isTrue); // the search ran
+      expect(find.textContaining('Teams checked'), findsOneWidget); // and the Find teams tab is showing
+      expect(find.text('Friend support: Altria Caster (Caster)'), findsOneWidget);
+    });
+
+    testWidgets('OK without a quest picked keeps the friend and says the quest is missing', (tester) async {
+      final c = await pump(tester, servants: 2);
+      c.upsertFriend(ServantSetup.defaults(504500));
+      await tester.pumpAndSettle();
+      expect(c.blocker, 'Pick a quest first');
+      await openFriendTab(tester);
+      await tester.tap(find.text('Altria Caster (Caster)'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(c.progress, isNull); // nothing to search yet
+      expect(find.text('Pick a quest first'), findsOneWidget); // shown in the Find teams tab
+    });
+  });
+
   testWidgets('the edit dialog has five append fields that default to 0 and save what the user types', (tester) async {
     final c = await pump(tester, servants: 5);
     await tester.tap(find.text('Altria Pendragon (Saber)'));

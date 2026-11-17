@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chaldea/app/modules/team_finder/team_finder_controller.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
@@ -153,4 +154,68 @@ void main() async {
     expect(TeamFinderController.decodeBox('{"a":1}'), isEmpty);
     expect(TeamFinderController.decodeBox('[{"id":100100,"np":9}]'), isEmpty); // invalid NP level dropped
   });
+
+  group('friend support', () {
+    test('a chosen friend is borrowed in slot 0 of every team the search tries', () async {
+      final slot0 = <int>{};
+      final c = TeamFinderController(runner: _RecordingRunner(slot0));
+      c.upsertServant(ServantSetup.defaults(704300)); // Summer Ibuki, Arts
+      c.upsertServant(ServantSetup.defaults(504500));
+      c.setQuest(quest, 'test quest');
+      // Urðr is not what the NP card rule would pick in NA (Castoria), so only a chosen friend explains slot 0
+      c.upsertFriend(ServantSetup.defaults(205500));
+      await c.search();
+      expect(slot0, {205500});
+      expect(c.progress!.teamsTotal, 1);
+    });
+
+    test('with no friend chosen the usual supports are tried', () async {
+      final slot0 = <int>{};
+      final c = TeamFinderController(runner: _RecordingRunner(slot0));
+      c.upsertServant(ServantSetup.defaults(704300));
+      c.upsertServant(ServantSetup.defaults(504500));
+      c.setQuest(quest, 'test quest');
+      await c.search();
+      expect(slot0, isNotEmpty);
+      expect(c.friends, isEmpty);
+    });
+
+    test('choosing the same friend again replaces it; removing drops it; either clears old results', () async {
+      final c = controller(servants: 2);
+      c.upsertFriend(ServantSetup.defaults(504500));
+      await c.search();
+      expect(c.progress, isNotNull);
+      c.upsertFriend(ServantSetup(svtId: 504500, level: 100));
+      expect(c.friends.length, 1);
+      expect(c.friends[504500]!.level, 100);
+      expect(c.progress, isNull);
+      await c.search();
+      c.removeFriend(504500);
+      expect(c.friends, isEmpty);
+      expect(c.progress, isNull);
+    });
+
+    test('friends are saved with persist on and loaded again next time', () async {
+      SharedPreferences.setMockInitialValues({});
+      final a = TeamFinderController(persist: true);
+      a.upsertFriend(ServantSetup(svtId: 504500, level: 100, appendLevels: [0, 0, 0, 0, 5]));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final b = TeamFinderController(persist: true);
+      await b.load();
+      expect(b.friends.keys, [504500]);
+      expect(b.friends[504500]!.level, 100);
+      expect(b.friends[504500]!.appendLevels, [0, 0, 0, 0, 5]);
+      expect(b.box, isEmpty); // friends are not mixed into the box
+    });
+  });
+}
+
+class _RecordingRunner implements BattleRunner {
+  final Set<int> slot0;
+  _RecordingRunner(this.slot0);
+  @override
+  Future<BattleOutcome> run(TeamSpec team, QuestSpec quest, TurnPlan plan) async {
+    slot0.add(team.slots[0].servant.svtId);
+    return const BattleOutcome(clearedAllWaves: false, turnsUsed: 3, totalNpDamage: 0, unverified: false);
+  }
 }

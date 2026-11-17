@@ -30,7 +30,7 @@ class TeamFinderPage extends StatefulWidget {
 class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProviderStateMixin {
   late final TeamFinderController c =
       widget.controller ?? TeamFinderController(persist: true, ownedSetup: ownedSetupFor);
-  late final TabController _tabs = TabController(length: 2, vsync: this);
+  late final TabController _tabs = TabController(length: 3, vsync: this);
 
   @override
   void initState() {
@@ -197,6 +197,72 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     });
   }
 
+  void _addFriend() {
+    router.pushPage(
+      ServantListPage(
+        pinged: commonSupportIds(),
+        showSecondaryFilter: true,
+        onSelected: (svt) {
+          if (svt.rarity < 4) {
+            EasyLoading.showError('Only 4★ and 5★ servants are used for now');
+            return;
+          }
+          _editFriend(c.friends[svt.id] ?? ServantSetup.defaults(svt.id));
+        },
+      ),
+    );
+  }
+
+  /// OK saves the friend support, goes back to Find teams and, if a quest and enough servants are set, searches.
+  Future<void> _editFriend(ServantSetup current) async {
+    final result = await showDialog<ServantSetup>(
+      context: context,
+      builder: (context) => _ServantEditDialog(current: current, name: _svtName(current.svtId)),
+    );
+    if (result == null || !mounted) return;
+    c.upsertFriend(result);
+    _tabs.animateTo(0);
+    if (c.blocker == null) c.search();
+  }
+
+  /// The servants to borrow as the friend support; none chosen = the usual supports for the damage dealer's NP card.
+  Widget _friendTab() {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        ListTile(
+          title: const Text('Friend support'),
+          subtitle: const Text(
+            'The servant to borrow, for example a second Altria Caster. Pick one, press OK and the teams are checked. '
+            'Stats default to level 90, skills 10/10/10, NP level 1, fou 1000; tap one to change them.',
+          ),
+          trailing: OutlinedButton.icon(
+            onPressed: _addFriend,
+            icon: const Icon(Icons.add),
+            label: const Text('Add support'),
+          ),
+        ),
+        if (c.friends.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text(
+              'No friend support chosen: the usual support for each damage dealer is used '
+              '(Arts: Castoria or Urðr, Quick: Scáthach-Skadi or Summer Skadi, Buster: Koyanskaya).',
+            ),
+          ),
+        for (final s in c.friends.values)
+          ListTile(
+            dense: true,
+            leading: db.gameData.servantsById[s.svtId]?.iconBuilder(context: context, width: 40, jumpToDetail: false),
+            title: Text(_svtName(s.svtId)),
+            subtitle: Text(_statLine(s)),
+            onTap: () => _editFriend(s),
+            trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => c.removeFriend(s.svtId)),
+          ),
+      ],
+    );
+  }
+
   Future<void> _editServant(ServantSetup current) async {
     final result = await showDialog<ServantSetup>(
       context: context,
@@ -217,10 +283,11 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
           tabs: const [
             Tab(text: 'Find teams'),
             Tab(text: 'Owned servants'),
+            Tab(text: 'Friend support'),
           ],
         ),
       ),
-      body: TabBarView(controller: _tabs, children: [_findTab(p, blocker), _ownedTab()]),
+      body: TabBarView(controller: _tabs, children: [_findTab(p, blocker), _ownedTab(), _friendTab()]),
     );
   }
 
@@ -248,6 +315,15 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
                       '${c.quest!.unsupportedGimmicks.isEmpty ? '' : ' · unverified: ${c.quest!.unsupportedGimmicks.join(', ')}'}',
           ),
           trailing: TextButton(onPressed: _pickQuest, child: const Text('Choose')),
+        ),
+        ListTile(
+          title: Text(
+            c.friends.isEmpty
+                ? 'Friend support: Automatic'
+                : 'Friend support: ${c.friends.keys.map(_svtName).join(', ')}',
+          ),
+          subtitle: c.friends.isEmpty ? const Text("the usual supports for the damage dealer's NP card") : null,
+          trailing: TextButton(onPressed: () => _tabs.animateTo(2), child: const Text('Choose support')),
         ),
         const Divider(),
         ListTile(

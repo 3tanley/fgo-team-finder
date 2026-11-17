@@ -15,6 +15,7 @@ class TeamFinderController extends ChangeNotifier {
     : runner = runner ?? EngineBattleRunner();
 
   static const _prefsKey = 'team_finder_box_v1';
+  static const _friendsKey = 'team_finder_friends_v1';
 
   final BattleRunner runner;
 
@@ -31,6 +32,9 @@ class TeamFinderController extends ChangeNotifier {
 
   /// Owned servants, one setup per servant id.
   final Map<int, ServantSetup> box = {};
+
+  /// Supports chosen to be borrowed, one setup per servant id. Empty = the usual supports for the NP card.
+  final Map<int, ServantSetup> friends = {};
   SolveProgress? progress;
   String? error;
   SolveRequest? _request;
@@ -65,6 +69,18 @@ class TeamFinderController extends ChangeNotifier {
     _changedBox();
   }
 
+  void upsertFriend(ServantSetup s) {
+    friends[s.svtId] = s;
+    _reset();
+    if (persist) _saveFriends();
+  }
+
+  void removeFriend(int svtId) {
+    friends.remove(svtId);
+    _reset();
+    if (persist) _saveFriends();
+  }
+
   /// Re-reads every owned servant in the box from Chaldea's data; others (added by hand) are left alone.
   /// Returns true if any setup changed.
   bool refreshOwned() {
@@ -96,7 +112,12 @@ class TeamFinderController extends ChangeNotifier {
     cancel();
     error = null;
     progress = null;
-    final request = SolveRequest(region: region, quest: quest!, box: box.values.toList());
+    final request = SolveRequest(
+      region: region,
+      quest: quest!,
+      box: box.values.toList(),
+      friends: friends.values.toList(),
+    );
     _request = request;
     notifyListeners();
     try {
@@ -131,10 +152,15 @@ class TeamFinderController extends ChangeNotifier {
 
   Future<void> load() async {
     try {
-      final saved = (await SharedPreferences.getInstance()).getString(_prefsKey);
-      if (saved == null) return;
-      for (final s in decodeBox(saved)) {
+      final prefs = await SharedPreferences.getInstance();
+      final saved = prefs.getString(_prefsKey);
+      final savedFriends = prefs.getString(_friendsKey);
+      if (saved == null && savedFriends == null) return;
+      for (final s in decodeBox(saved ?? '[]')) {
         box[s.svtId] = s;
+      }
+      for (final s in decodeBox(savedFriends ?? '[]')) {
+        friends[s.svtId] = s;
       }
       notifyListeners();
     } catch (e) {
@@ -147,6 +173,14 @@ class TeamFinderController extends ChangeNotifier {
       await (await SharedPreferences.getInstance()).setString(_prefsKey, encodeBox(box.values));
     } catch (e) {
       debugPrint('team finder: could not save box: $e');
+    }
+  }
+
+  Future<void> _saveFriends() async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(_friendsKey, encodeBox(friends.values));
+    } catch (e) {
+      debugPrint('team finder: could not save friend supports: $e');
     }
   }
 

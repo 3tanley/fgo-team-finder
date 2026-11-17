@@ -37,10 +37,19 @@ class SolveRequest {
   final QuestSpec quest;
   final List<ServantSetup> box;
 
+  /// Supports the user chose to borrow; empty = the usual supports for the damage dealer's NP card.
+  final List<ServantSetup> friends;
+
   /// Work cap: at most this many battle simulations, then the search stops and says it was truncated.
   final int maxSims;
   bool _cancelled = false;
-  SolveRequest({required this.region, required this.quest, required this.box, this.maxSims = 20000});
+  SolveRequest({
+    required this.region,
+    required this.quest,
+    required this.box,
+    this.friends = const [],
+    this.maxSims = 20000,
+  });
 
   void cancel() => _cancelled = true;
   bool get cancelled => _cancelled;
@@ -94,7 +103,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     return;
   }
 
-  final teams = generateTeams(req.box, req.region).toList();
+  final teams = generateTeams(req.box, req.region, friends: req.friends).toList();
   final results = <TeamResult>[];
   var nonViable = 0, sims = 0, done = 0;
   var truncated = false;
