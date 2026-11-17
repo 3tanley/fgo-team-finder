@@ -43,3 +43,10 @@ List<String> describeLog(List<String> log, TeamSpec team) {
   }
   return out;
 }
+
+/// Display name of a craft essence.
+String ceLabel(int ceId) => db.gameData.craftEssencesById[ceId]?.lName.l ?? '#$ceId';
+
+/// `Lv100 · limit broken` and, for more than one copy, `· ×2`.
+String ceLine(CeSetup ce) =>
+    'Lv${ce.level} · ${ce.limitBreak ? 'limit broken' : 'not limit broken'}${ce.quantity > 1 ? ' · ×${ce.quantity}' : ''}';

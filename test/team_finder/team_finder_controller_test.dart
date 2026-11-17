@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chaldea/app/modules/team_finder/team_finder_controller.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
+import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/models/models.dart';
@@ -155,6 +156,91 @@ void main() async {
     expect(TeamFinderController.decodeBox('[{"id":100100,"np":9}]'), isEmpty); // invalid NP level dropped
   });
 
+  group('craft essences', () {
+    test('the list starts as one Black Grail at level 100, limit broken', () {
+      final c = controller();
+      expect(c.ces.map((e) => e.ceId), [kBlackGrailCeId]);
+      expect([c.ces.single.level, c.ces.single.limitBreak, c.ces.single.quantity], [100, true, 1]);
+    });
+
+    test('the search hands the CE list to the team generator (event CE x2 on both servants, no Black Grail)', () async {
+      final ceIds = <List<int?>>[];
+      final c = TeamFinderController(runner: _RecordingRunner({}, ceIds));
+      c.upsertServant(ServantSetup.defaults(704300)); // Summer Ibuki, the only damage dealer
+      c.upsertServant(ServantSetup.defaults(504500));
+      c.setQuest(quest, 'test quest');
+      c.removeCe(kBlackGrailCeId);
+      c.upsertCe(CeSetup(9408210, quantity: 2));
+      await c.search();
+      expect(ceIds, isNotEmpty);
+      for (final ids in ceIds) {
+        expect(ids.sublist(1, 3), [9408210, 9408210]);
+      }
+    });
+
+    test('by default the search uses one Black Grail on the damage dealer', () async {
+      final ceIds = <List<int?>>[];
+      final c = TeamFinderController(runner: _RecordingRunner({}, ceIds));
+      c.upsertServant(ServantSetup.defaults(704300));
+      c.upsertServant(ServantSetup.defaults(504500));
+      c.setQuest(quest, 'test quest');
+      await c.search();
+      expect(ceIds.every((ids) => ids.sublist(1, 3).contains(kBlackGrailCeId)), isTrue);
+    });
+
+    test('an empty list means no CE at all, not the default', () async {
+      final ceIds = <List<int?>>[];
+      final c = TeamFinderController(runner: _RecordingRunner({}, ceIds));
+      c.upsertServant(ServantSetup.defaults(704300));
+      c.upsertServant(ServantSetup.defaults(504500));
+      c.setQuest(quest, 'test quest');
+      c.removeCe(kBlackGrailCeId);
+      await c.search();
+      expect(ceIds, isNotEmpty);
+      expect(ceIds.every((ids) => ids.sublist(1, 3).every((e) => e == null)), isTrue);
+    });
+
+    test('adding the same CE again replaces it; adding or removing clears old results', () async {
+      final c = controller(servants: 2);
+      await c.search();
+      expect(c.progress, isNotNull);
+      c.upsertCe(CeSetup(kBlackGrailCeId, level: 50, limitBreak: false, quantity: 2));
+      expect(c.ces.length, 1);
+      expect([c.ces.single.level, c.ces.single.limitBreak, c.ces.single.quantity], [50, false, 2]);
+      expect(c.progress, isNull);
+      await c.search();
+      c.removeCe(kBlackGrailCeId);
+      expect(c.ces, isEmpty);
+      expect(c.progress, isNull);
+    });
+
+    test('the list is saved and loaded in order, and an emptied list stays empty', () async {
+      SharedPreferences.setMockInitialValues({});
+      final a = TeamFinderController(persist: true);
+      a.upsertCe(CeSetup(9408210, level: 80, limitBreak: false, quantity: 2));
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final b = TeamFinderController(persist: true);
+      await b.load();
+      expect(b.ces.map((e) => e.ceId), [kBlackGrailCeId, 9408210]);
+      expect([b.ces.last.level, b.ces.last.limitBreak, b.ces.last.quantity], [80, false, 2]);
+
+      b.removeCe(kBlackGrailCeId);
+      b.removeCe(9408210);
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+      final c = TeamFinderController(persist: true);
+      await c.load();
+      expect(c.ces, isEmpty);
+    });
+
+    test('nothing saved means the default list; garbage or out-of-range entries are dropped, never thrown', () {
+      expect(TeamFinderController.decodeCes('not json'), isEmpty);
+      expect(TeamFinderController.decodeCes('{"a":1}'), isEmpty);
+      expect(TeamFinderController.decodeCes('[{"id":9408210,"lv":101,"lb":true,"qty":1}]'), isEmpty);
+      expect(TeamFinderController.decodeCes('[{"id":9408210,"lv":100,"lb":true,"qty":0}]'), isEmpty);
+      expect(TeamFinderController.decodeCes('[{"id":9408210}]').single.level, 100); // missing fields: defaults
+    });
+  });
+
   group('friend support', () {
     test('a chosen friend is borrowed in slot 0 of every team the search tries', () async {
       final slot0 = <int>{};
@@ -212,10 +298,12 @@ void main() async {
 
 class _RecordingRunner implements BattleRunner {
   final Set<int> slot0;
-  _RecordingRunner(this.slot0);
+  final List<List<int?>>? ceIds;
+  _RecordingRunner(this.slot0, [this.ceIds]);
   @override
   Future<BattleOutcome> run(TeamSpec team, QuestSpec quest, TurnPlan plan) async {
     slot0.add(team.slots[0].servant.svtId);
+    ceIds?.add([for (final s in team.slots) s.ce?.ceId]);
     return const BattleOutcome(clearedAllWaves: false, turnsUsed: 3, totalNpDamage: 0, unverified: false);
   }
 }

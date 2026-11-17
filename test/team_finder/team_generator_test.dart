@@ -273,4 +273,99 @@ void main() async {
       expect(generateTeams(box([summerIbuki, castoria]), Region.na, friends: const []).length, auto.length);
     });
   });
+
+  group('craft essences chosen by the user', () {
+    const eventCe = 9408210; // an event CE (Pohjola's Christmas Eve reward CE)
+    List<int?> ceIds(TeamSpec t) => t.slots.map((s) => s.ce?.ceId).toList();
+
+    test('quantity 2 puts the CE on both damage dealers of the pair', () {
+      final teams = generateTeams(
+        box([altria, emiya, castoria]),
+        Region.jp,
+        ces: [CeSetup(eventCe, quantity: 2)],
+      ).where((t) => t.slots[1].servant.svtId == altria && t.slots[2].servant.svtId == emiya).toList();
+      expect(teams, isNotEmpty);
+      for (final t in teams) {
+        expect(ceIds(t).sublist(1, 3), [eventCe, eventCe]);
+        expect(ceIds(t), isNot(contains(kBlackGrailCeId)));
+      }
+      // both dealers carry the same CE: no 'one team per holder' doubling, only the two slot orders below
+      final keys = teams.map((t) => t.slots.map((s) => s.servant.svtId).join('/')).toList();
+      expect(keys.toSet().length, keys.length);
+    });
+
+    test('two dealers that both carry a CE are tried in both slot orders; one CE holder is not doubled', () {
+      List<String> orders(List<CeSetup> ces) => generateTeams(box([altria, emiya, castoria]), Region.jp, ces: ces)
+          .where((t) => t.slots[0].servant.svtId == idOf(314) && t.slots.length == 4)
+          .map((t) => '${t.slots[1].servant.svtId}/${t.slots[2].servant.svtId}')
+          .toList();
+      expect(orders([CeSetup(eventCe, quantity: 2)]).toSet(), {'$altria/$emiya', '$emiya/$altria'});
+      expect(orders([CeSetup(eventCe, quantity: 2)]).length, 2);
+      // one Black Grail: only one dealer carries a CE, so the slot order is not multiplied
+      expect(orders([CeSetup(kBlackGrailCeId)]).length, 2); // the two holders
+    });
+
+    test('level and limit break are carried to the servant that holds the CE', () {
+      final teams = generateTeams(
+        box([summerIbuki, castoria]),
+        Region.jp,
+        ces: [CeSetup(kBlackGrailCeId, level: 20, limitBreak: false)],
+      ).toList();
+      expect(teams, isNotEmpty);
+      for (final t in teams) {
+        final held = t.slots.singleWhere((s) => s.ce?.ceId == kBlackGrailCeId);
+        expect(held.servant.svtId, summerIbuki);
+        expect(held.ce!.level, 20);
+        expect(held.ce!.limitBreak, isFalse);
+      }
+    });
+
+    test('copies left after the damage dealers go to the other box servants, never to the support', () {
+      final oberon = db.gameData.servantsNoDup[316]!.id;
+      final teams = generateTeams(
+        box([summerIbuki, castoria, oberon]),
+        Region.jp,
+        ces: [CeSetup(eventCe, quantity: 3)],
+      ).where((t) => t.slots[1].servant.svtId == summerIbuki && t.slots[2].servant.svtId == castoria).toList();
+      expect(teams, isNotEmpty);
+      for (final t in teams) {
+        expect(t.slots.length, 4);
+        expect(ceIds(t).sublist(1), [eventCe, eventCe, eventCe]);
+        expect(t.slots[0].ce?.ceId, isNot(eventCe)); // the borrowed support keeps its bond CE
+      }
+    });
+
+    test('with two kinds, the list order decides: the first kind goes to the dealers first, both ways round', () {
+      final teams = generateTeams(
+        box([altria, emiya, castoria]),
+        Region.jp,
+        ces: [CeSetup(eventCe), CeSetup(kBlackGrailCeId)],
+      ).where((t) => t.slots[1].servant.svtId == altria && t.slots[2].servant.svtId == emiya).toList();
+      expect(teams.map((t) => ceIds(t).sublist(1, 3).join('/')).toSet(), {
+        '$eventCe/$kBlackGrailCeId',
+        '$kBlackGrailCeId/$eventCe',
+      });
+    });
+
+    test('an empty list means no CE on the box servants; the support still carries its bond CE', () {
+      final teams = generateTeams(box([summerIbuki, castoria]), Region.jp, ces: const []).toList();
+      expect(teams, isNotEmpty);
+      for (final t in teams) {
+        expect(ceIds(t).sublist(1), everyElement(isNull));
+        expect(t.slots[0].ce, isNotNull);
+      }
+    });
+
+    test('no list given is the old rule: one Black Grail, max limit break, level 100', () {
+      final old = generateTeams(fiveBox, Region.na).toList();
+      final same = generateTeams(fiveBox, Region.na, ces: [CeSetup(kBlackGrailCeId)]).toList();
+      expect(same.map(ceIds).toList(), old.map(ceIds).toList());
+      final held = old.first.slots.firstWhere((s) => s.ce?.ceId == kBlackGrailCeId).ce!;
+      expect([held.level, held.limitBreak], [100, true]);
+    });
+
+    test('a quantity below 1 is refused', () {
+      expect(() => CeSetup(eventCe, quantity: 0), throwsArgumentError);
+    });
+  });
 }

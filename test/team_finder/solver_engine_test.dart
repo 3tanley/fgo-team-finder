@@ -55,5 +55,5 @@ void main() async {
       reason: 'viable teams: ${last.results.map((r) => r.team.slots.map((s) => s.servant.svtId).toList()).toList()}',
     );
     print('LOOP dmg ${loop.first.totalNpDamage}');
-  });
+  }, timeout: const Timeout(Duration(minutes: 2))); // teams the loop cannot clear also get the plan search
 }

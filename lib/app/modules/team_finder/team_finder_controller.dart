@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:chaldea/app/team_finder/battle_runner.dart';
+import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
 import 'package:chaldea/models/models.dart' show Region;
@@ -16,6 +17,7 @@ class TeamFinderController extends ChangeNotifier {
 
   static const _prefsKey = 'team_finder_box_v1';
   static const _friendsKey = 'team_finder_friends_v1';
+  static const _cesKey = 'team_finder_ces_v1';
 
   final BattleRunner runner;
 
@@ -35,6 +37,10 @@ class TeamFinderController extends ChangeNotifier {
 
   /// Supports chosen to be borrowed, one setup per servant id. Empty = the usual supports for the NP card.
   final Map<int, ServantSetup> friends = {};
+
+  /// Craft essences to hand out, one entry per CE id with its quantity, in the order they were added.
+  /// Starts as one Black Grail; an empty list means no CE at all.
+  final List<CeSetup> ces = [CeSetup(kBlackGrailCeId)];
   SolveProgress? progress;
   String? error;
   SolveRequest? _request;
@@ -81,6 +87,23 @@ class TeamFinderController extends ChangeNotifier {
     if (persist) _saveFriends();
   }
 
+  void upsertCe(CeSetup ce) {
+    final i = ces.indexWhere((e) => e.ceId == ce.ceId);
+    if (i >= 0) {
+      ces[i] = ce;
+    } else {
+      ces.add(ce);
+    }
+    _reset();
+    if (persist) _saveCes();
+  }
+
+  void removeCe(int ceId) {
+    ces.removeWhere((e) => e.ceId == ceId);
+    _reset();
+    if (persist) _saveCes();
+  }
+
   /// Re-reads every owned servant in the box from Chaldea's data; others (added by hand) are left alone.
   /// Returns true if any setup changed.
   bool refreshOwned() {
@@ -117,6 +140,7 @@ class TeamFinderController extends ChangeNotifier {
       quest: quest!,
       box: box.values.toList(),
       friends: friends.values.toList(),
+      ces: ces.toList(),
     );
     _request = request;
     notifyListeners();
@@ -155,12 +179,18 @@ class TeamFinderController extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       final saved = prefs.getString(_prefsKey);
       final savedFriends = prefs.getString(_friendsKey);
-      if (saved == null && savedFriends == null) return;
+      final savedCes = prefs.getString(_cesKey);
+      if (saved == null && savedFriends == null && savedCes == null) return;
       for (final s in decodeBox(saved ?? '[]')) {
         box[s.svtId] = s;
       }
       for (final s in decodeBox(savedFriends ?? '[]')) {
         friends[s.svtId] = s;
+      }
+      if (savedCes != null) {
+        ces
+          ..clear()
+          ..addAll(decodeCes(savedCes));
       }
       notifyListeners();
     } catch (e) {
@@ -182,6 +212,48 @@ class TeamFinderController extends ChangeNotifier {
     } catch (e) {
       debugPrint('team finder: could not save friend supports: $e');
     }
+  }
+
+  Future<void> _saveCes() async {
+    try {
+      await (await SharedPreferences.getInstance()).setString(_cesKey, encodeCes(ces));
+    } catch (e) {
+      debugPrint('team finder: could not save craft essences: $e');
+    }
+  }
+
+  static String encodeCes(Iterable<CeSetup> ces) => jsonEncode([
+    for (final e in ces) {'id': e.ceId, 'lv': e.level, 'lb': e.limitBreak, 'qty': e.quantity},
+  ]);
+
+  /// Reads a saved CE list. Anything unreadable or out of range is dropped, never thrown.
+  static List<CeSetup> decodeCes(String text) {
+    final Object? data;
+    try {
+      data = jsonDecode(text);
+    } on FormatException {
+      return [];
+    }
+    if (data is! List) return [];
+    final out = <CeSetup>[];
+    for (final e in data) {
+      try {
+        final m = e as Map<String, dynamic>;
+        out.add(
+          CeSetup(
+            m['id'] as int,
+            level: (m['lv'] as int?) ?? kDefaultCeLevel,
+            limitBreak: (m['lb'] as bool?) ?? true,
+            quantity: (m['qty'] as int?) ?? 1,
+          ),
+        );
+      } on ArgumentError {
+        continue;
+      } on TypeError {
+        continue;
+      }
+    }
+    return out;
   }
 
   static String encodeBox(Iterable<ServantSetup> box) => jsonEncode([

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 import 'dart:ui' as ui;
@@ -167,6 +168,26 @@ class _CachedImageState extends State<CachedImage> {
 
   /// Reused so [TweenAnimationBuilder] does not restart the fade on rebuild.
   static final Tween<double> _fadeInTween = Tween<double>(begin: 0, end: 1);
+
+  /// A load that failed (busy or rate-limited image server, dropped connection) is tried again after 2, 4 and
+  /// 8 seconds; before this the icon stayed blank until the page was reloaded.
+  static const int _maxRetries = 3;
+  int _retries = 0;
+  Timer? _retryTimer;
+
+  void _scheduleRetry() {
+    if (_retries >= _maxRetries || _retryTimer != null) return;
+    _retryTimer = Timer(Duration(seconds: 2 << _retries), () {
+      _retryTimer = null;
+      if (mounted) setState(() => _retries++);
+    });
+  }
+
+  @override
+  void dispose() {
+    _retryTimer?.cancel();
+    super.dispose();
+  }
 
   CachedImageOption get cachedOption => widget.cachedOption ?? const CachedImageOption();
 
@@ -338,6 +359,7 @@ class _CachedImageState extends State<CachedImage> {
     );
 
     Widget child = CachedNetworkImage(
+      key: ValueKey(_retries), // a new key makes the plugin load it again
       imageUrl: url,
       httpHeaders: cachedOption.httpHeaders,
       cacheManager: _cacheManager,
@@ -353,7 +375,10 @@ class _CachedImageState extends State<CachedImage> {
           ? null
           : (context, url, progress) =>
                 cachedOption.progressIndicatorBuilder!(context, widget.imageUrl ?? "", progress),
-      errorWidget: (context, url, error) => _withError(context, widget.imageUrl ?? "", error),
+      errorWidget: (context, url, error) {
+        _scheduleRetry();
+        return _withError(context, widget.imageUrl ?? "", error);
+      },
       fadeOutDuration: cachedOption.fadeOutDuration,
       fadeOutCurve: cachedOption.fadeOutCurve,
       fadeInDuration: cachedOption.fadeInDuration,

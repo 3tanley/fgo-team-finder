@@ -52,7 +52,17 @@ class CeSetup {
   final int ceId;
   final int level;
   final bool limitBreak;
-  CeSetup(this.ceId, {this.level = kDefaultCeLevel, this.limitBreak = true});
+
+  /// How many copies the user has to hand out (only read from the user's CE list, not from a team slot).
+  final int quantity;
+
+  /// Throws [ArgumentError] on out-of-range input (this is the user-input boundary).
+  CeSetup(this.ceId, {this.level = kDefaultCeLevel, this.limitBreak = true, this.quantity = 1}) {
+    if (level < 1 || level > 100) throw ArgumentError.value(level, 'level', 'must be 1..100');
+    if (quantity < 1 || quantity > 5) throw ArgumentError.value(quantity, 'quantity', 'must be 1..5');
+  }
+
+  bool sameAs(CeSetup o) => ceId == o.ceId && level == o.level && limitBreak == o.limitBreak;
 }
 
 class MysticCodeSetup {
@@ -129,6 +139,14 @@ class AutoNps extends TurnAction {
 /// use, then every charged NP fires like [AutoNps]. A plan of `AutoLoop`s per turn is the whole loop.
 class AutoLoop extends TurnAction {
   const AutoLoop();
+}
+
+/// Search for a way to clear (see plan_search.dart): which skills on which turn and on whom, who fires, when
+/// to swap. Put it in the first turn; it plays the whole battle.
+class AutoSearch extends TurnAction {
+  /// Work cap for this team: at most this many simulated turns.
+  final int maxSims;
+  const AutoSearch({this.maxSims = 150});
 }
 
 /// One list of actions per turn. A turn with no actions just ends the turn.

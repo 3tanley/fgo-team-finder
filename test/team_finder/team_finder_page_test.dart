@@ -1,9 +1,13 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chaldea/app/modules/team_finder/team_finder_controller.dart';
 import 'package:chaldea/app/modules/team_finder/team_finder_page.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
+import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/generated/l10n.dart';
@@ -239,6 +243,108 @@ void main() async {
       await tester.pumpAndSettle();
       expect(c.progress, isNull); // nothing to search yet
       expect(find.text('Pick a quest first'), findsOneWidget); // shown in the Find teams tab
+    });
+  });
+
+  group('craft essences tab', () {
+    Future<void> openCeTab(WidgetTester tester) async {
+      await tester.tap(find.widgetWithText(Tab, 'Craft essences'));
+      await tester.pumpAndSettle();
+    }
+
+    final eventQuest = questSpecFromPhase(
+      QuestPhase.fromJson(jsonDecode(File('test/team_finder/fixtures/quest_94138610_jp.json').readAsStringSync())),
+    );
+
+    testWidgets('a fourth tab lists the default Black Grail; the Find teams tab summarises it', (tester) async {
+      await pump(tester);
+      expect(find.widgetWithText(Tab, 'Craft essences'), findsOneWidget);
+      expect(find.text('Craft essences: The Black Grail ×1'), findsOneWidget);
+      await openCeTab(tester);
+      expect(find.text('The Black Grail'), findsOneWidget);
+      expect(find.text('Lv100 · limit broken'), findsOneWidget);
+      expect(find.widgetWithText(OutlinedButton, 'Add CE'), findsOneWidget);
+    });
+
+    testWidgets('Add CE offers Black Grail, event damage CE and event drop CE', (tester) async {
+      await pump(tester);
+      await openCeTab(tester);
+      await tester.tap(find.text('Add CE'));
+      await tester.pumpAndSettle();
+      expect(find.text('The Black Grail'), findsOneWidget); // the row
+      expect(find.text('Black Grail'), findsOneWidget); // the option
+      expect(find.text('Event damage CE'), findsOneWidget);
+      expect(find.text('Event drop CE'), findsOneWidget);
+    });
+
+    testWidgets('Black Grail with level, limit break and quantity chosen in the dialog', (tester) async {
+      final c = await pump(tester);
+      c.removeCe(kBlackGrailCeId);
+      await tester.pumpAndSettle();
+      await openCeTab(tester);
+      await tester.tap(find.text('Add CE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Black Grail'));
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Level'), '50');
+      await tester.enterText(find.widgetWithText(TextField, 'Quantity'), '2');
+      await tester.tap(find.byType(Switch)); // limit broken: on -> off
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      final ce = c.ces.single;
+      expect([ce.ceId, ce.level, ce.limitBreak, ce.quantity], [kBlackGrailCeId, 50, false, 2]);
+      expect(find.text('Lv50 · not limit broken · ×2'), findsOneWidget);
+    });
+
+    testWidgets('an event CE needs a quest, and then lists that event\'s CEs of the chosen kind', (tester) async {
+      final c = await pump(tester);
+      await openCeTab(tester);
+      await tester.tap(find.text('Add CE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Event damage CE'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Pick a quest first'), findsOneWidget);
+      expect(find.text('OK'), findsNothing); // no stats dialog opened
+
+      c.setQuest(eventQuest, 'Event node');
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add CE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Event damage CE'));
+      await tester.pumpAndSettle();
+      expect(find.text('December 23rd'), findsOneWidget);
+      expect(find.text('Lamp in Hand'), findsNothing); // a drop CE, not a damage CE
+      await tester.tap(find.text('December 23rd'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(c.ces.map((e) => e.ceId), [kBlackGrailCeId, 9408210]);
+    });
+
+    testWidgets('a level above 100 or a quantity above 5 is refused with a message', (tester) async {
+      final c = await pump(tester);
+      await openCeTab(tester);
+      await tester.tap(find.text('The Black Grail')); // tap a row = change it
+      await tester.pumpAndSettle();
+      await tester.enterText(find.widgetWithText(TextField, 'Level'), '101');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('level must be 1..100'), findsOneWidget);
+      await tester.enterText(find.widgetWithText(TextField, 'Level'), '100');
+      await tester.enterText(find.widgetWithText(TextField, 'Quantity'), '6');
+      await tester.tap(find.text('OK'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('quantity must be 1..5'), findsOneWidget);
+      expect(c.ces.single.quantity, 1);
+    });
+
+    testWidgets('the X removes a CE', (tester) async {
+      final c = await pump(tester);
+      await openCeTab(tester);
+      await tester.tap(find.byIcon(Icons.close));
+      await tester.pumpAndSettle();
+      expect(c.ces, isEmpty);
+      expect(find.textContaining('No craft essences'), findsOneWidget);
     });
   });
 

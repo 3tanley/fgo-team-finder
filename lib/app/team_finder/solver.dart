@@ -8,6 +8,13 @@ import 'turn_planner.dart';
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
+/// Simulated turns the plan search (plan_search.dart) may spend over a whole request, shared between the
+/// teams: few teams get a deep search each, many teams a shallow one, so the total time stays bounded
+/// (about 20 ms a turn, so about a minute at most).
+const int kSearchTurnBudget = 3000;
+const int kMinSearchTurnsPerTeam = 12;
+const int kMaxSearchTurnsPerTeam = 150;
+
 class NeedMoreServants implements Exception {
   final int have;
   const NeedMoreServants(this.have);
@@ -40,6 +47,9 @@ class SolveRequest {
   /// Supports the user chose to borrow; empty = the usual supports for the damage dealer's NP card.
   final List<ServantSetup> friends;
 
+  /// The user's craft essences with their quantities, in the order they are handed out; null = one Black Grail.
+  final List<CeSetup>? ces;
+
   /// Work cap: at most this many battle simulations, then the search stops and says it was truncated.
   final int maxSims;
   bool _cancelled = false;
@@ -48,6 +58,7 @@ class SolveRequest {
     required this.quest,
     required this.box,
     this.friends = const [],
+    this.ces,
     this.maxSims = 20000,
   });
 
@@ -81,8 +92,8 @@ class SolveProgress {
   });
 }
 
-/// Option-1 search: every team from [generateTeams], every plan from [planTurns], keeping each team's
-/// best clearing plan. Throws [NeedMoreServants] (as a stream error) for fewer than [kMinBoxServants] box servants.
+/// Every team from [generateTeams], every plan from [planTurns] (the loop, then the plan search), keeping each
+/// team's best clearing plan. Throws [NeedMoreServants] (as a stream error) for fewer than [kMinBoxServants] box servants.
 /// shortcut: runs on the calling isolate and yields to the event loop between teams; move the engine
 /// into worker isolates if searches are too slow.
 Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
@@ -103,7 +114,10 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     return;
   }
 
-  final teams = generateTeams(req.box, req.region, friends: req.friends).toList();
+  final teams = generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList();
+  final searchSims = teams.isEmpty
+      ? kMaxSearchTurnsPerTeam
+      : (kSearchTurnBudget ~/ teams.length).clamp(kMinSearchTurnsPerTeam, kMaxSearchTurnsPerTeam);
   final results = <TeamResult>[];
   var nonViable = 0, sims = 0, done = 0;
   var truncated = false;
@@ -122,7 +136,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   for (final team in teams) {
     if (req.cancelled) break;
     TeamResult? best;
-    for (final plan in planTurns(team)) {
+    for (final plan in planTurns(team, searchSims: searchSims)) {
       if (req.cancelled) break search;
       if (sims >= req.maxSims) {
         truncated = true;

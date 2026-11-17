@@ -4,6 +4,7 @@ import 'package:chaldea/app/api/atlas.dart';
 import 'package:chaldea/app/app.dart';
 import 'package:chaldea/app/modules/servant/servant.dart';
 import 'package:chaldea/app/modules/servant/servant_list.dart';
+import 'package:chaldea/app/team_finder/ce_options.dart';
 import 'package:chaldea/app/team_finder/labels.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/owned.dart';
@@ -30,7 +31,7 @@ class TeamFinderPage extends StatefulWidget {
 class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProviderStateMixin {
   late final TeamFinderController c =
       widget.controller ?? TeamFinderController(persist: true, ownedSetup: ownedSetupFor);
-  late final TabController _tabs = TabController(length: 3, vsync: this);
+  late final TabController _tabs = TabController(length: 4, vsync: this);
 
   @override
   void initState() {
@@ -263,6 +264,94 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     );
   }
 
+  /// Pick what kind of CE to add: Black Grail, or an event CE of the chosen quest's event.
+  Future<void> _addCe() async {
+    final kind = await showDialog<CeKind>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Add a craft essence'),
+        children: [
+          for (final (kind, title, subtitle) in const [
+            (CeKind.blackGrail, 'Black Grail', 'the usual damage CE'),
+            (CeKind.eventDamage, 'Event damage CE', "the quest's event reward CE"),
+            (CeKind.eventDrop, 'Event drop CE', "the quest's limited event CEs"),
+          ])
+            ListTile(title: Text(title), subtitle: Text(subtitle), onTap: () => Navigator.pop(context, kind)),
+        ],
+      ),
+    );
+    if (kind == null || !mounted) return;
+    if (kind == CeKind.blackGrail) {
+      final ce = ceChoices(kind, c.quest).first;
+      return _editCe(c.ces.where((e) => e.ceId == ce.id).firstOrNull ?? CeSetup(ce.id));
+    }
+    final label = kind == CeKind.eventDamage ? 'Event damage CE' : 'Event drop CE';
+    void say(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+    if (c.quest == null) return say('Pick a quest first: event CEs belong to the quest\'s event');
+    final choices = ceChoices(kind, c.quest);
+    if (choices.isEmpty) return say('This quest\'s event has no ${label.toLowerCase()}');
+    final picked = await showDialog<CraftEssence>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: Text(label),
+        children: [
+          for (final ce in choices)
+            ListTile(
+              leading: ce.iconBuilder(context: context, width: 40, jumpToDetail: false),
+              title: Text(ce.lName.l),
+              onTap: () => Navigator.pop(context, ce),
+            ),
+        ],
+      ),
+    );
+    if (picked == null || !mounted) return;
+    await _editCe(c.ces.where((e) => e.ceId == picked.id).firstOrNull ?? CeSetup(picked.id));
+  }
+
+  Future<void> _editCe(CeSetup current) async {
+    final result = await showDialog<CeSetup>(
+      context: context,
+      builder: (context) => _CeEditDialog(current: current, name: ceLabel(current.ceId)),
+    );
+    if (result != null) c.upsertCe(result);
+  }
+
+  /// The craft essences handed to the servants of every team: level, limit break and quantity each.
+  Widget _ceTab() {
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 32),
+      children: [
+        ListTile(
+          title: const Text('Craft essences'),
+          subtitle: const Text(
+            'Black Grail, an event damage CE or an event drop CE, each with its level, limit break and quantity. '
+            'Copies go to the damage dealers first, then the other servants, in this order; the borrowed support '
+            'keeps its bond CE.',
+          ),
+          trailing: OutlinedButton.icon(onPressed: _addCe, icon: const Icon(Icons.add), label: const Text('Add CE')),
+        ),
+        if (c.ces.isEmpty)
+          const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('No craft essences: the servants go without. Add Black Grail or an event CE.'),
+          ),
+        for (final e in c.ces)
+          ListTile(
+            dense: true,
+            leading: db.gameData.craftEssencesById[e.ceId]?.iconBuilder(
+              context: context,
+              width: 40,
+              jumpToDetail: false,
+            ),
+            title: Text(ceLabel(e.ceId)),
+            subtitle: Text(ceLine(e)),
+            onTap: () => _editCe(e),
+            trailing: IconButton(icon: const Icon(Icons.close), onPressed: () => c.removeCe(e.ceId)),
+          ),
+      ],
+    );
+  }
+
   Future<void> _editServant(ServantSetup current) async {
     final result = await showDialog<ServantSetup>(
       context: context,
@@ -280,14 +369,17 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
         title: const Text('Team Finder'),
         bottom: TabBar(
           controller: _tabs,
+          isScrollable: true, // four tabs do not fit side by side in the narrow pane
+          tabAlignment: TabAlignment.start,
           tabs: const [
             Tab(text: 'Find teams'),
             Tab(text: 'Owned servants'),
             Tab(text: 'Friend support'),
+            Tab(text: 'Craft essences'),
           ],
         ),
       ),
-      body: TabBarView(controller: _tabs, children: [_findTab(p, blocker), _ownedTab(), _friendTab()]),
+      body: TabBarView(controller: _tabs, children: [_findTab(p, blocker), _ownedTab(), _friendTab(), _ceTab()]),
     );
   }
 
@@ -324,6 +416,15 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
           ),
           subtitle: c.friends.isEmpty ? const Text("the usual supports for the damage dealer's NP card") : null,
           trailing: TextButton(onPressed: () => _tabs.animateTo(2), child: const Text('Choose support')),
+        ),
+        ListTile(
+          title: Text(
+            c.ces.isEmpty
+                ? 'Craft essences: none'
+                : 'Craft essences: ${c.ces.map((e) => '${ceLabel(e.ceId)} ×${e.quantity}').join(', ')}',
+          ),
+          subtitle: const Text('handed to the damage dealers first, then the other servants'),
+          trailing: TextButton(onPressed: () => _tabs.animateTo(3), child: const Text('Choose CEs')),
         ),
         const Divider(),
         ListTile(
@@ -387,8 +488,9 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
               ),
             if (p.finished && p.error == null && p.results.isEmpty && !p.truncated && !p.cancelled)
               const Text(
-                'Not viable: no team found that clears this quest in 3 turns. '
-                'This search only tries the Castoria-style loop (see below), so other loops are not covered.',
+                'Not viable: no team found that clears this quest in 3 turns. Each team is tried with the '
+                'Castoria-style loop (see below) and then with a search over skill order, targets, who fires and '
+                'when to swap. The search has a work limit per team, so a clear it did not reach is not ruled out.',
               ),
           ],
         ),
@@ -399,7 +501,8 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
           'Loop rules used: turn 1 buffs first (Castoria skill 3 on the attacker), then charge the attacker only as '
           'much as needed each turn, and on the final wave swap a Castoria for a back-row support with the '
           'Decisive-Battle Chaldea Uniform. Black Grail goes on the attacker; the support carries its bond CE. '
-          'The slot order is fixed: support first.',
+          'The slot order is fixed: support first. A team that the loop cannot clear is searched with other skill '
+          'orders, targets, firing orders and swap timings; the plan under each result shows what was used.',
           style: TextStyle(fontSize: 12),
         ),
       ),
@@ -420,6 +523,91 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
           ],
         ),
     ];
+  }
+}
+
+class _CeEditDialog extends StatefulWidget {
+  final CeSetup current;
+  final String name;
+  const _CeEditDialog({required this.current, required this.name});
+
+  @override
+  State<_CeEditDialog> createState() => _CeEditDialogState();
+}
+
+class _CeEditDialogState extends State<_CeEditDialog> {
+  late final _level = TextEditingController(text: '${widget.current.level}');
+  late final _quantity = TextEditingController(text: '${widget.current.quantity}');
+  late bool _limitBreak = widget.current.limitBreak;
+  String? _error;
+
+  @override
+  void dispose() {
+    _level.dispose();
+    _quantity.dispose();
+    super.dispose();
+  }
+
+  /// A blank field keeps the current value; anything else must be a number in range.
+  void _save() {
+    int read(TextEditingController c, int fallback) => c.text.trim().isEmpty ? fallback : int.parse(c.text.trim());
+    try {
+      final level = read(_level, widget.current.level);
+      if (level < 1 || level > 100) throw ArgumentError('level must be 1..100');
+      final quantity = read(_quantity, widget.current.quantity);
+      if (quantity < 1 || quantity > 5) throw ArgumentError('quantity must be 1..5');
+      Navigator.pop(context, CeSetup(widget.current.ceId, level: level, limitBreak: _limitBreak, quantity: quantity));
+    } on FormatException {
+      setState(() => _error = 'Numbers only');
+    } on ArgumentError catch (e) {
+      setState(() => _error = '${e.message}');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.name),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Wrap(
+              spacing: 8,
+              children: [
+                SizedBox(
+                  width: 96,
+                  child: TextField(
+                    controller: _level,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Level'),
+                  ),
+                ),
+                SizedBox(
+                  width: 96,
+                  child: TextField(
+                    controller: _quantity,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Quantity'),
+                  ),
+                ),
+              ],
+            ),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Limit broken'),
+              value: _limitBreak,
+              onChanged: (v) => setState(() => _limitBreak = v),
+            ),
+            if (_error != null) Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: Text(S.current.cancel)),
+        TextButton(onPressed: _save, child: Text(S.current.ok)),
+      ],
+    );
   }
 }
 

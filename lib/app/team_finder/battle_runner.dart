@@ -6,6 +6,7 @@ import 'package:chaldea/utils/utils.dart';
 
 import 'loop_policy.dart';
 import 'models.dart';
+import 'plan_search.dart';
 
 abstract class BattleRunner {
   Future<BattleOutcome> run(TeamSpec team, QuestSpec quest, TurnPlan plan);
@@ -55,15 +56,28 @@ class EngineBattleRunner implements BattleRunner {
         ..level = mcSetup.level;
     }
     final policy = LoopPolicy();
-    battle.delegate = BattleDelegate()..replaceMember = policy.chooseSwap;
+    final searchAction = plan.turns.expand((t) => t).whereType<AutoSearch>().firstOrNull;
+    final search = searchAction == null
+        ? null
+        : PlanSearch(battle, team, quest, turns: plan.turns.length, maxSims: searchAction.maxSims);
+    battle.delegate = BattleDelegate()..replaceMember = search?.chooseSwap ?? policy.chooseSwap;
     await battle.init(quest.phase, [for (final slot in team.slots) playerSvtDataFor(slot)], mysticCode);
 
     String? failure;
-    final log = <String>[];
+    var log = <String>[];
     var turnsPlayed = 0; // the engine's totalTurnCount is the *next* turn number, so count ourselves
+    if (search != null) {
+      // the search plays the whole battle itself; the per-turn actions below are skipped
+      if (await search.run()) {
+        turnsPlayed = search.turnsPlayed;
+        log = search.log;
+      } else {
+        failure = 'no clear found within ${search.sims} simulated turns';
+      }
+    }
     turns:
     for (final (turnNo, actions) in plan.turns.indexed) {
-      if (battle.isBattleWin || battle.isBattleFinished) break;
+      if (search != null || battle.isBattleWin || battle.isBattleFinished) break;
       if (actions.any((a) => a is AutoLoop)) await policy.playSkills(battle, team, quest, turnNo, log);
       for (final action in actions.whereType<SkillAction>()) {
         final svt = battle.onFieldAllyServants.getOrNull(action.servantIndex);
@@ -86,7 +100,7 @@ class EngineBattleRunner implements BattleRunner {
 
       for (final action in actions) {
         switch (action) {
-          case SkillAction():
+          case SkillAction() || AutoSearch():
             break; // already done above
           case NpAction():
             final svt = battle.onFieldAllyServants.getOrNull(action.servantIndex);
