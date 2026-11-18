@@ -140,6 +140,9 @@ class EngineBattleRunner implements BattleRunner {
       failure: failure,
       log: log,
       records: battle.recorder.records.toList(),
+      searchTurns: search?.sims ?? 0,
+      searchCapped: search != null && !battle.isBattleWin && search.capped,
+      searchSlack: search?.slack ?? 0,
     );
   }
 }

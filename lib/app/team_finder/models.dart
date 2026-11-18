@@ -173,6 +173,14 @@ class BattleOutcome {
 
   /// The engine's own battle records (skills, NPs, per-enemy damage), the data behind the simulator's Records panel.
   final List<BattleRecord> records;
+
+  /// Simulated turns the plan search spent (0 when it did not run) and whether it stopped at its cap without
+  /// finishing: then "no clear" only means "not found yet", a bigger cap may still find one.
+  final int searchTurns;
+  final bool searchCapped;
+
+  /// The plan search's optimism margin (see PlanSearch.slack); 0 when it did not run.
+  final double searchSlack;
   const BattleOutcome({
     required this.clearedAllWaves,
     required this.turnsUsed,
@@ -181,6 +189,9 @@ class BattleOutcome {
     this.failure,
     this.log = const [],
     this.records = const [],
+    this.searchTurns = 0,
+    this.searchCapped = false,
+    this.searchSlack = 0,
   });
 }
 

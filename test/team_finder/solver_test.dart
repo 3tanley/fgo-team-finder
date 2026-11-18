@@ -136,4 +136,63 @@ void main() async {
     final last = await solve(request(), runner).last;
     expect(last.results.first.log, ['T1 skill 0.3 -> 2']);
   });
+
+  group('quick pass, then the search in order of margin', () {
+    bool isSearch(TurnPlan p) => p.turns.first.any((a) => a is AutoSearch);
+    int capOf(TurnPlan p) => p.turns.first.whereType<AutoSearch>().first.maxSims;
+    BattleOutcome stuck(double slack, int turns) => BattleOutcome(
+      clearedAllWaves: false,
+      turnsUsed: 0,
+      totalNpDamage: 0,
+      unverified: false,
+      searchTurns: turns,
+      searchCapped: true,
+      searchSlack: slack,
+    );
+
+    test('a team the quick check rules out is never searched', () async {
+      final runner = FakeRunner((_, _) => failed()); // searchCapped false = ruled out
+      final last = await solve(request(), runner).last;
+      expect(runner.calls, last.teamsTotal * 2); // the loop and the quick check, nothing more
+      expect(last.nonViable, last.teamsTotal);
+      expect(last.truncated, isFalse);
+    });
+
+    test('teams are searched likeliest first and the budget stops the rest', () async {
+      final slack = Map<TeamSpec, double>.identity();
+      final searched = <double>[];
+      final runner = FakeRunner((team, plan) {
+        if (!isSearch(plan)) return failed();
+        final s = slack.putIfAbsent(team, () => slack.length.toDouble()); // a different margin per team
+        if (capOf(plan) == kQuickCheckTurns) return stuck(s, kQuickCheckTurns);
+        searched.add(s);
+        return stuck(s, kSearchTurnBudget ~/ 2);
+      });
+      final last = await solve(request(), runner).last;
+      expect(searched.length, 2); // two searches spend the budget
+      expect(searched, [...searched]..sort((a, b) => b.compareTo(a)));
+      expect(searched.first, slack.length - 1); // the biggest margin went first
+      expect(last.truncated, isTrue);
+      expect(last.unresolved, 0);
+      expect(last.results.length + last.nonViable, last.teamsTotal);
+    });
+
+    test('a clear found in the search pass is reported, with its damage', () async {
+      final runner = FakeRunner((team, plan) {
+        if (!isSearch(plan)) return failed();
+        if (capOf(plan) == kQuickCheckTurns) return stuck(1, kQuickCheckTurns);
+        return const BattleOutcome(
+          clearedAllWaves: true,
+          turnsUsed: 3,
+          totalNpDamage: 777,
+          unverified: false,
+          searchTurns: 10,
+        );
+      });
+      final last = await solve(request(), runner).last;
+      expect(last.results, isNotEmpty);
+      expect(last.results.first.totalNpDamage, 777);
+      expect(last.nonViable, 0);
+    });
+  });
 }

@@ -1,6 +1,7 @@
 import 'package:tuple/tuple.dart';
 
 import 'package:chaldea/app/battle/models/battle.dart';
+import 'package:chaldea/app/battle/utils/battle_logger.dart';
 import 'package:chaldea/models/models.dart';
 import 'package:chaldea/utils/utils.dart';
 
@@ -43,6 +44,14 @@ class PlanSearch {
   /// Work cap: at most this many simulated turns, then the search gives up.
   final int maxSims;
   int sims = 0;
+
+  /// How far the quick optimistic play got: NP damage of that play over the quest's total HP. Teams with a
+  /// bigger margin are likelier to have a clear, so the solver searches them first.
+  double slack = 0;
+
+  /// True if the search stopped because it ran out of its work cap (not because every choice was tried).
+  bool get capped => !_hopeless && sims >= maxSims;
+  bool _hopeless = false;
   int turnsPlayed = 0;
 
   /// The actions of the clear that was found (same line format as the loop, see [BattleOutcome.log]).
@@ -65,14 +74,31 @@ class PlanSearch {
         if (all.getOrNull(k) != null && isDamageDealer(slot.servant.svtId)) k,
     ];
     final chosen = dealers.where(
-      (k) => k == 0 ? !isSupportName(team.slots[k].servant.svtId) : team.slots[k].ce != null,
+      (k) =>
+          !_blocksAllies(team.slots[k].servant.svtId) &&
+          (k == 0 ? !isSupportName(team.slots[k].servant.svtId) : team.slots[k].ce != null),
     );
     _main = {for (final k in chosen.isEmpty ? dealers : chosen) all[k]!.uniqueId};
     final mark = _mark();
     final possible = await _clearsWithEverything();
+    final dealt = battle.recorder.records
+        .whereType<BattleAttackRecord>()
+        .where((a) => a.card?.isTD == true)
+        .fold<int>(0, (sum, a) => sum + a.damage);
+    final totalHp = quest.waves.expand((w) => w.enemies).fold<int>(0, (sum, e) => sum + e.hp);
+    slack = totalHp == 0 ? 0 : dealt / totalHp;
     _restore(mark);
+    _hopeless = !possible;
     return possible && await _turn(0);
   }
+
+  /// True if the servant's NP makes the enemies invincible or puts them to sleep: fired before the others it
+  /// leaves them nothing to hit (Oberon), so it is never a main dealer and always fires last.
+  static bool _blocksAllies(int svtId) =>
+      db.gameData.servantsById[svtId]?.groupedNoblePhantasms[1]?.lastOrNull?.functions.any(
+        (f) => f.funcTargetType.isEnemy && (f.buff?.type == BuffType.invincible || f.buff?.type == BuffType.donotAct),
+      ) ??
+      false;
 
   /// Quick way out for hopeless teams: plays the battle with every skill off cooldown every turn (single-target
   /// ones on every main dealer), every gauge full and the back row swapped in on the last turn. No real plan
@@ -108,7 +134,7 @@ class PlanSearch {
       }
       await useAll([-1, 0, 1, 2]);
       for (var i = 0; i < 3; i++) {
-        _svt(i)?.np = 10000;
+        _svt(i)?.np = 30000; // the most any gauge can hold, so the check stays optimistic (overcharge)
       }
       final all = [0, 1, 2].where((i) => _main.contains(_svt(i)?.uniqueId)).toList();
       if (!await _fire(t + 1, all, mustClear)) return false;
@@ -124,8 +150,10 @@ class PlanSearch {
   BattleSkillInfoData? _info(_Skill k) =>
       k.src < 0 ? battle.masterSkillInfo.getOrNull(k.idx) : _svt(k.src)?.skillInfoList.getOrNull(k.idx);
 
+  /// What the skill does to the team: functions aimed at enemies (curses, debuffs, an enemy NP gain) are left out.
   Iterable<NiceFunction> _functions(_Skill k) =>
-      _info(k)?.skill?.functions.where((f) => f.funcTargetTeam != FuncApplyTarget.enemy) ?? const [];
+      _info(k)?.skill?.functions.where((f) => f.funcTargetTeam != FuncApplyTarget.enemy && !f.funcTargetType.isEnemy) ??
+      const [];
 
   bool _isSwap(_Skill k) => _functions(k).any((f) => f.funcType == FuncType.replaceMember);
   bool _charges(_Skill k) => _functions(k).any((f) => f.funcType == FuncType.gainNp);
@@ -148,15 +176,32 @@ class PlanSearch {
       if (_isReady((src: -1, idx: m)) && !_isSwap((src: -1, idx: m))) (src: -1, idx: m),
   ];
 
-  /// True if using the skill now loses nothing: no instant effect, and every buff has no use count and lasts
-  /// through the last turn.
-  bool _lasting(_Skill k, int turnsLeft) {
+  /// Buffs that never change damage or gauge, so spending the skill early costs nothing for them.
+  static const _defensive = {
+    BuffType.invincible,
+    BuffType.avoidance,
+    BuffType.guts,
+    BuffType.upDefence,
+    BuffType.upToleranceSubstate,
+    BuffType.avoidState,
+    BuffType.subSelfdamage,
+    BuffType.upGainHp,
+    BuffType.regainHp,
+    BuffType.upDamagedropnp,
+  };
+
+  /// True if using the skill now loses nothing: its effects are buffs that last through the last turn (a buff
+  /// with a use count is only spent by its holder's own attacks, so it counts while the holder is not in
+  /// [firing]), plus instant effects that cannot hurt (stars, NP-turn haste) and buffs that are defensive only.
+  bool _lasting(_Skill k, int turnsLeft, List<int> firing) {
     final info = _info(k);
     if (info?.skill == null) return false;
     for (final f in _functions(k)) {
+      if (f.funcType == FuncType.hastenNpturn || f.funcType == FuncType.gainStar) continue;
       if (f.funcType != FuncType.addState && f.funcType != FuncType.addStateShort) return false;
+      if (_defensive.contains(f.buff?.type)) continue;
       final vals = f.svals.getOrNull(info!.skillLv - 1) ?? f.svals.firstOrNull;
-      if ((vals?.Count ?? -1) > 0) return false;
+      if ((vals?.Count ?? -1) > 0 && (f.funcTargetType != FuncTargetType.self || firing.contains(k.src))) return false;
       final turn = vals?.Turn ?? -1;
       if (turn > 0 && turn < turnsLeft) return false;
     }
@@ -282,7 +327,10 @@ class PlanSearch {
       // last turn: groups that fired with everything, per primary; a smaller group cannot do more
       final fired = <int?, List<List<int>>>{};
       for (final firing in groups) {
-        for (final primary in firing.isEmpty ? [dealers.firstOrNull] : firing) {
+        // single-target buffs go to a firing dealer first, then to the other main dealers on the field (an Arts
+        // buff cast on the turn the Buster dealer fires belongs to the Arts dealer that fires later)
+        for (final primary
+            in firing.isEmpty ? [dealers.firstOrNull] : [...firing, ...dealers.where((d) => !firing.contains(d))]) {
           final dominated = (fired[primary] ?? const []).any(
             (g) => g.length > firing.length && firing.every(g.contains),
           );
@@ -340,7 +388,7 @@ class PlanSearch {
     if (firingSlots.contains(-1)) return false;
 
     for (final k in _ready()) {
-      if (!_charges(k) && (last || _lasting(k, turns - t)) && _isReady(k)) await _use(k, target(), tn);
+      if (!_charges(k) && (last || _lasting(k, turns - t, firingSlots)) && _isReady(k)) await _use(k, target(), tn);
     }
 
     bool full(int i) => (_svt(i)?.np ?? 0) >= 10000;
@@ -368,6 +416,7 @@ class PlanSearch {
     if (!tried.add(signature)) return false;
 
     final shorts = _ready().where((k) => !_charges(k)).toList();
+    var probed = false;
     while (true) {
       if (sims >= maxSims) return false;
       final mark = _mark();
@@ -375,6 +424,17 @@ class PlanSearch {
       if (cleared && await _turn(t + 1)) return true;
       _restore(mark);
       if (cleared || shorts.isEmpty) return false;
+      if (!probed) {
+        // one probe with every short skill used: if the wave still survives, no smaller set clears it either
+        probed = true;
+        final probe = _mark();
+        for (final k in shorts) {
+          if (_isReady(k)) await _use(k, target(), tn);
+        }
+        final possible = await _fire(tn, firingSlots, mustClear);
+        _restore(probe);
+        if (!possible) return false;
+      }
       await _use(shorts.removeAt(0), target(), tn);
     }
   }

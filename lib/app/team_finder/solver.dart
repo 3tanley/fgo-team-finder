@@ -9,12 +9,17 @@ import 'turn_planner.dart';
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
-/// Simulated turns the plan search (plan_search.dart) may spend over a whole request, shared between the
-/// teams: few teams get a deep search each, many teams a shallow one, so the total time stays bounded
-/// (about 20 ms a turn, so about a minute at most).
+/// Simulated turns the plan search (plan_search.dart) may spend over a whole request (about 50 ms a turn, so a
+/// few minutes at most). Every team first gets the loop plan and the search's quick optimistic check, which
+/// also rates how likely the team is to hide a clear (the margin). The teams the check cannot rule out are
+/// then searched in order of that margin, each with up to [kSearchTurnsPerTeam] turns, until the budget is
+/// spent. A team whose search finished is final; one that hit its cap or was never reached is reported as
+/// not settled (the request is [SolveProgress.truncated]).
 const int kSearchTurnBudget = 3000;
-const int kMinSearchTurnsPerTeam = 12;
-const int kMaxSearchTurnsPerTeam = 150;
+const int kSearchTurnsPerTeam = 400;
+
+/// The search's own optimistic check costs 3 turns; capped here the search does nothing else.
+const int kQuickCheckTurns = 3;
 
 class NeedMoreServants implements Exception {
   final int have;
@@ -84,6 +89,9 @@ class SolveProgress {
   final bool cancelled;
   final bool finished;
   final String? error;
+
+  /// Teams the quick check could not rule out that are still waiting for the search.
+  final int unresolved;
   const SolveProgress({
     required this.teamsDone,
     required this.teamsTotal,
@@ -94,6 +102,7 @@ class SolveProgress {
     required this.cancelled,
     required this.finished,
     this.error,
+    this.unresolved = 0,
   });
 }
 
@@ -120,10 +129,9 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   }
 
   final teams = generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList();
-  final searchSims = teams.isEmpty
-      ? kMaxSearchTurnsPerTeam
-      : (kSearchTurnBudget ~/ teams.length).clamp(kMinSearchTurnsPerTeam, kMaxSearchTurnsPerTeam);
   final results = <TeamResult>[];
+  final unresolved = <TeamSpec>[];
+  final slackOf = <TeamSpec, double>{};
   var nonViable = 0, sims = 0, done = 0;
   var truncated = false;
   SolveProgress snapshot({bool finished = false}) => SolveProgress(
@@ -135,42 +143,81 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     truncated: truncated,
     cancelled: req.cancelled,
     finished: finished,
+    unresolved: unresolved.length,
   );
+  TeamResult resultOf(TeamSpec team, TurnPlan plan, BattleOutcome out) => TeamResult(
+    team: team,
+    plan: plan,
+    unverified: out.unverified,
+    totalNpDamage: out.totalNpDamage,
+    log: out.log,
+    records: out.records,
+  );
+  void addResult(TeamResult r) => results
+    ..add(r)
+    ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
 
-  search:
+  // Quick pass: every team gets the loop and the optimistic check (no search yet).
+  screening:
   for (final team in teams) {
     if (req.cancelled) break;
     TeamResult? best;
-    for (final plan in planTurns(team, searchSims: searchSims)) {
-      if (req.cancelled) break search;
+    var capped = false;
+    for (final plan in planTurns(team, searchSims: kQuickCheckTurns)) {
+      if (req.cancelled) break screening;
       if (sims >= req.maxSims) {
         truncated = true;
-        if (best != null) results.add(best);
-        break search;
+        if (best != null) addResult(best);
+        break screening;
       }
       final out = await runner.run(team, req.quest, plan);
       sims++;
-      if (out.clearedAllWaves && (best == null || out.totalNpDamage > best.totalNpDamage)) {
-        best = TeamResult(
-          team: team,
-          plan: plan,
-          unverified: out.unverified,
-          totalNpDamage: out.totalNpDamage,
-          log: out.log,
-          records: out.records,
-        );
+      if (out.clearedAllWaves) {
+        if (best == null || out.totalNpDamage > best.totalNpDamage) best = resultOf(team, plan, out);
+      } else if (out.searchCapped) {
+        capped = true;
+        slackOf[team] = out.searchSlack;
       }
     }
     done++;
-    if (best == null) {
-      nonViable++;
+    if (best != null) {
+      addResult(best);
+    } else if (capped) {
+      unresolved.add(team); // not ruled out: the search ran out of its cap before it had tried everything
     } else {
-      results
-        ..add(best)
-        ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
+      nonViable++;
     }
     await Future<void>.delayed(Duration.zero); // keep the UI responsive
     if (best != null || done % 20 == 0) yield snapshot();
+  }
+
+  // Search pass: the teams the quick check could not rule out, likeliest first, out of a shared budget.
+  if (done == teams.length) {
+    yield snapshot();
+    // the teams with the most optimistic margin first: they are the likeliest to hide a clear
+    unresolved.sort((a, b) => (slackOf[b] ?? 0).compareTo(slackOf[a] ?? 0));
+    var turnsLeft = kSearchTurnBudget;
+    while (unresolved.isNotEmpty && !req.cancelled) {
+      if (turnsLeft <= 0 || sims >= req.maxSims) {
+        truncated = true;
+        nonViable += unresolved.length;
+        unresolved.clear();
+        break;
+      }
+      final team = unresolved.removeAt(0);
+      final plan = planTurns(team, searchSims: kSearchTurnsPerTeam.clamp(1, turnsLeft)).last; // the search plan
+      final out = await runner.run(team, req.quest, plan);
+      sims++;
+      turnsLeft -= out.searchTurns;
+      if (out.clearedAllWaves) {
+        addResult(resultOf(team, plan, out));
+      } else {
+        nonViable++;
+        if (out.searchCapped) truncated = true;
+      }
+      await Future<void>.delayed(Duration.zero);
+      yield snapshot();
+    }
   }
   results.sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
   yield snapshot(finished: true);

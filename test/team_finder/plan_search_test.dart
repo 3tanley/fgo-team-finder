@@ -83,6 +83,41 @@ void main() async {
     expect(np.fold<int>(0, (s, a) => s + a.damage), out.totalNpDamage); // same numbers the result title shows
   });
 
+  // The owner's clear of node 94138610 with Archetype: EARTH (Buster) and Sodom's Beast/Draco (Arts), found by hand:
+  // Earth fires on turn 1, Draco on turn 2 (a Castoria swap for Oberon), both on turn 3. Draco's regen skills
+  // and Castoria's Arts buff (on Draco) go out on turn 1, before Draco fires.
+  group('node 94138610, Earth + Draco (a clear found by hand)', () {
+    const earth = 2300500, draco = 3300100, flowerDoll = 9408190;
+    ServantSetup built(int id) =>
+        ServantSetup(svtId: id, level: 120, npLevel: 5, atkFou: 2000, hpFou: 2000, appendLevels: [0, 10, 0, 0, 10]);
+    TeamSpec owner(CeSetup earthCe, {CeSetup? support, CeSetup? swapIn}) => TeamSpec([
+      SlotSpec(ServantSetup.defaults(altriaCaster), ce: support),
+      SlotSpec(built(earth), ce: earthCe),
+      SlotSpec(built(draco), ce: CeSetup(flowerDoll, level: 80)),
+      SlotSpec(ServantSetup.defaults(oberon), ce: swapIn),
+    ], mysticCode: MysticCodeSetup(kDefaultMysticCodeId));
+    const searchPlan = TurnPlan([
+      [AutoSearch(maxSims: 3000)],
+      [],
+      [],
+    ]);
+
+    test('a Team Finder team (bond-CE support, bare Oberon) is solved', () async {
+      final t = owner(CeSetup(eventCe), support: bond(altriaCaster));
+      final out = await runner.run(t, node, searchPlan);
+      expect(out.failure, isNull);
+      expect(out.clearedAllWaves, isTrue);
+      expect(out.turnsUsed, lessThanOrEqualTo(3));
+    }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('Oberon carrying a CE does not make the team look hopeless (his NP makes the enemies invincible)', () async {
+      final dec = CeSetup(eventCe, level: 1, limitBreak: false);
+      final out = await runner.run(owner(dec, support: dec, swapIn: dec), node, searchPlan);
+      expect(out.clearedAllWaves, isTrue, reason: out.failure ?? '');
+      expect(out.searchTurns, greaterThan(3)); // not stopped by the quick check
+    }, timeout: const Timeout(Duration(minutes: 2)));
+  });
+
   test('the solver finds the two-dealer clear whichever order the box lists the dealers in', () async {
     final urdr = db.gameData.servantsNoDup[470]!.id;
     final strongIbuki = ServantSetup(
