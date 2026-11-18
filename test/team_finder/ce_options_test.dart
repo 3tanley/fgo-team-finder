@@ -29,12 +29,16 @@ void main() async {
     expect(ids(CeKind.blackGrail, eventQuest), {kBlackGrailCeId});
   });
 
-  test("event damage CE: the event's reward CE (the one earned by playing the event)", () {
-    expect(ids(CeKind.eventDamage, eventQuest), {9408210});
+  test('event with only drop CEs: the reward CE December 23rd is a drop CE too, and no damage CE exists', () {
+    expect(ids(CeKind.eventDamage, eventQuest), isEmpty);
+    expect(ids(CeKind.eventDrop, eventQuest), {9408210, 9408180, 9408190, 9408200});
   });
 
-  test('event drop CE: the limited event CEs of the same event', () {
-    expect(ids(CeKind.eventDrop, eventQuest), {9408180, 9408190, 9408200});
+  test('a CE is a drop CE by what its skills do: the reward CE December 23rd is one, an attack-boost CE is not', () {
+    expect(raisesDrops(db.gameData.craftEssencesById[9408210]!), isTrue); // December 23rd
+    expect(raisesDrops(db.gameData.craftEssencesById[9408180]!), isTrue); // Lamp in Hand
+    expect(raisesDrops(db.gameData.craftEssencesById[9405600]!), isFalse); // Dancing Like a Flower: event attack boost
+    expect(raisesDrops(db.gameData.craftEssencesById[kBlackGrailCeId]!), isFalse);
   });
 
   test('no quest, or a quest outside an event, has no event CEs', () {

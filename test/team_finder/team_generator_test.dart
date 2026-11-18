@@ -194,14 +194,25 @@ void main() async {
       expect(supportsOf(teams), busterSupports);
     });
 
-    test('with dealers of different cards each team uses the support for its Black Grail holder', () {
+    test('with dealers of different cards the support may fit either dealer, whichever holds the CE', () {
       final teams = generateTeams(box([altria, summerIbuki, castoria, castoria, castoria]), Region.jp).toList();
       final allowed = {CardType.arts: artsSupports, CardType.quick: quickSupports, CardType.buster: busterSupports};
+      final dealerCards = [altria, summerIbuki].map(npCardType).toSet();
       for (final t in teams) {
-        final holder = t.slots.firstWhere((s) => s.ce?.ceId == kBlackGrailCeId).servant.svtId;
-        expect(allowed[npCardType(holder)], contains(t.slots[0].servant.svtId));
+        expect(dealerCards.any((card) => allowed[card]!.contains(t.slots[0].servant.svtId)), isTrue);
       }
-      expect(supportsOf(teams), {...artsSupports, ...busterSupports});
+      expect(supportsOf(teams), {for (final card in dealerCards) ...allowed[card]!});
+      // one Black Grail holder, yet the support for the other dealer's card is borrowed too
+      final holderCard = npCardType(teams.first.slots.firstWhere((s) => s.ce?.ceId == kBlackGrailCeId).servant.svtId);
+      expect(
+        teams.any(
+          (t) => !allowed[npCardType(t.slots.firstWhere((s) => s.ce?.ceId == kBlackGrailCeId).servant.svtId)]!.contains(
+            t.slots[0].servant.svtId,
+          ),
+        ),
+        isTrue,
+        reason: 'holder card $holderCard',
+      );
     });
 
     test('Oberon and Miss Crane are never the borrowed support (Oberon is only the final-wave swap-in)', () {

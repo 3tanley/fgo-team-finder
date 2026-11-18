@@ -306,6 +306,8 @@ void main() async {
       await tester.pumpAndSettle();
       expect(find.textContaining('Pick a quest first'), findsOneWidget);
       expect(find.text('OK'), findsNothing); // no stats dialog opened
+      await tester.pump(const Duration(seconds: 5)); // let that snack bar go before the next one
+      await tester.pumpAndSettle();
 
       c.setQuest(eventQuest, 'Event node');
       await tester.pumpAndSettle();
@@ -313,13 +315,23 @@ void main() async {
       await tester.pumpAndSettle();
       await tester.tap(find.text('Event damage CE'));
       await tester.pumpAndSettle();
+      expect(find.textContaining('no event damage ce'), findsOneWidget); // this event only has drop CEs
+      await tester.pump(const Duration(seconds: 5));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Add CE'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Event drop CE'));
+      await tester.pumpAndSettle();
+      expect(find.text('Lamp in Hand'), findsOneWidget);
       expect(find.text('December 23rd'), findsOneWidget);
-      expect(find.text('Lamp in Hand'), findsNothing); // a drop CE, not a damage CE
       await tester.tap(find.text('December 23rd'));
       await tester.pumpAndSettle();
       await tester.tap(find.text('OK'));
       await tester.pumpAndSettle();
       expect(c.ces.map((e) => e.ceId), [kBlackGrailCeId, 9408210]);
+      // four icons were listed and the icon loader allows 3 a second on the real clock: let it finish
+      await tester.runAsync(() => Future<void>.delayed(const Duration(seconds: 2)));
+      await tester.pump(const Duration(seconds: 30));
     });
 
     testWidgets('a level above 100 or a quantity above 5 is refused with a message', (tester) async {

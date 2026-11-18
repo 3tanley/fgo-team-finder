@@ -274,8 +274,16 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
         children: [
           for (final (kind, title, subtitle) in const [
             (CeKind.blackGrail, 'Black Grail', 'the usual damage CE'),
-            (CeKind.eventDamage, 'Event damage CE', "the quest's event reward CE"),
-            (CeKind.eventDrop, 'Event drop CE', "the quest's limited event CEs"),
+            (
+              CeKind.eventDamage,
+              'Event damage CE',
+              "event CEs with an event-only attack boost (many events have none)",
+            ),
+            (
+              CeKind.eventDrop,
+              'Event drop CE',
+              "the event's drop CEs, including its reward CE (some add NP charge or stats)",
+            ),
           ])
             ListTile(title: Text(title), subtitle: Text(subtitle), onTap: () => Navigator.pop(context, kind)),
         ],
@@ -492,6 +500,8 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
               'Teams checked ${p.teamsDone}/${p.teamsTotal} · viable ${p.results.length} · not viable ${p.nonViable}'
               '${p.cancelled ? ' · cancelled' : ''}',
             ),
+            if (c.searching && p.unresolved > 0)
+              Text('Searching ${p.unresolved} more teams the quick check could not rule out, likeliest first.'),
             if (p.truncated)
               const Text(
                 'Stopped at the search limit: results may be incomplete.',

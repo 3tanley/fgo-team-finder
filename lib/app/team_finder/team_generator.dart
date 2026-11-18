@@ -76,10 +76,11 @@ Iterable<TeamSpec> generateTeams(
         final bothWays = dealers.length == 2 && !same(forDealers[0], forDealers[1]) && !box[i].sameAs(box[j]);
         for (final order in [forDealers, if (bothWays) forDealers.reversed.toList()]) {
           final ceOf = {for (final (d, k) in dealers.indexed) k: order[d]};
-          // the borrowed support depends on the NP card of a dealer that carries a CE, unless the user chose it
+          // the borrowed support depends on the NP card of a dealer that carries a CE, unless the user chose it;
+          // with two dealers either one's card will do (the other is carried by the plan, not the CE)
           final cards = {
             for (final k in dealers)
-              if (ceOf[k] != null || order.every((ce) => ce == null)) npCardType(box[k].svtId),
+              if (dealers.length > 1 || ceOf[k] != null || order.every((ce) => ce == null)) npCardType(box[k].svtId),
           }.nonNulls;
           if (cards.isEmpty) continue;
           if (friends.isEmpty && !cards.any((card) => supportFitsCard(supportSlot.servant.svtId, card))) continue;
