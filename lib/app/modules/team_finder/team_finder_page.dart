@@ -2,6 +2,7 @@ import 'package:flutter_easyloading/flutter_easyloading.dart';
 
 import 'package:chaldea/app/api/atlas.dart';
 import 'package:chaldea/app/app.dart';
+import 'package:chaldea/app/modules/battle/simulation/recorder.dart';
 import 'package:chaldea/app/modules/servant/servant.dart';
 import 'package:chaldea/app/modules/servant/servant_list.dart';
 import 'package:chaldea/app/team_finder/ce_options.dart';
@@ -468,6 +469,16 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     );
   }
 
+  /// Same Records panel as the battle simulator: skill order, NPs and damage per enemy, wave by wave.
+  void _showRecords(TeamResult r) {
+    showDialog<void>(
+      context: context,
+      builder: (context) => Dialog(
+        child: SingleChildScrollView(child: BattleRecorderPanel(records: r.records)),
+      ),
+    );
+  }
+
   List<Widget> _results(SolveProgress p) {
     return [
       Padding(
@@ -507,20 +518,13 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
         ),
       ),
       for (final (i, r) in p.results.take(50).indexed)
-        ExpansionTile(
+        ListTile(
+          onTap: () => _showRecords(r),
+          trailing: const Icon(Icons.chevron_right),
           title: Text(
             '#${i + 1}  ${_fmt(r.totalNpDamage)} NP damage (overkill included)${r.unverified ? '  (unverified)' : ''}',
           ),
           subtitle: Text(r.team.slots.map((s) => _svtName(s.servant.svtId)).join(' / ')),
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: SelectableText(describeLog(r.log, r.team).join('\n')),
-              ),
-            ),
-          ],
         ),
     ];
   }

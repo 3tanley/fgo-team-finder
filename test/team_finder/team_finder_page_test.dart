@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:material_ui/material_ui.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:chaldea/app/modules/battle/simulation/recorder.dart';
 import 'package:chaldea/app/modules/team_finder/team_finder_controller.dart';
 import 'package:chaldea/app/modules/team_finder/team_finder_page.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
@@ -379,14 +380,16 @@ void main() async {
     expect(c.box[100100]!.appendLevels, [0, 0, 0, 0, 0]);
   });
 
-  testWidgets('expanding a result shows how the team clears', (tester) async {
+  testWidgets('tapping a result opens the simulator Records panel', (tester) async {
     await pump(tester, servants: 5, withQuest: true);
     await tester.tap(find.widgetWithText(FilledButton, 'Search'));
     await tester.pumpAndSettle();
-    await tester.tap(find.byType(ExpansionTile).first);
+    await tester.tap(
+      find
+          .byWidgetPredicate((w) => w is ListTile && w.title is Text && (w.title as Text).data!.startsWith('#1 '))
+          .first,
+    );
     await tester.pumpAndSettle();
-    // the engine's "T1 skill 0.3 -> 2" is shown with servant names, not slot numbers
-    expect(find.textContaining('skill 3 →'), findsWidgets);
-    expect(find.text('T1 skill 0.3 -> 2'), findsNothing);
+    expect(find.byType(BattleRecorderPanel), findsOneWidget);
   });
 }

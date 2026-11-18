@@ -1,3 +1,4 @@
+import 'package:chaldea/app/battle/utils/battle_logger.dart' show BattleRecord;
 import 'package:chaldea/models/models.dart' show Region;
 
 import 'battle_runner.dart';
@@ -30,12 +31,16 @@ class TeamResult {
 
   /// What the best plan did, one line per action (see [BattleOutcome.log]).
   final List<String> log;
+
+  /// The best plan's engine records, for the Records panel.
+  final List<BattleRecord> records;
   const TeamResult({
     required this.team,
     required this.plan,
     required this.unverified,
     required this.totalNpDamage,
     this.log = const [],
+    this.records = const [],
   });
 }
 
@@ -152,6 +157,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
           unverified: out.unverified,
           totalNpDamage: out.totalNpDamage,
           log: out.log,
+          records: out.records,
         );
       }
     }

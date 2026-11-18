@@ -139,6 +139,7 @@ class EngineBattleRunner implements BattleRunner {
       unverified: quest.unsupportedGimmicks.isNotEmpty,
       failure: failure,
       log: log,
+      records: battle.recorder.records.toList(),
     );
   }
 }

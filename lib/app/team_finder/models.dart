@@ -1,3 +1,4 @@
+import 'package:chaldea/app/battle/utils/battle_logger.dart' show BattleRecord;
 import 'package:chaldea/models/models.dart' show QuestPhase;
 
 import 'defaults.dart';
@@ -169,6 +170,9 @@ class BattleOutcome {
   /// What happened, one line per action: `T1 skill 0.3 -> 2` (servant.skill -> target), `T3 swap 1 <-> 3`,
   /// `T3 mc 1`, `T1 np 2`. Lets the UI show the plan and tests check the order.
   final List<String> log;
+
+  /// The engine's own battle records (skills, NPs, per-enemy damage), the data behind the simulator's Records panel.
+  final List<BattleRecord> records;
   const BattleOutcome({
     required this.clearedAllWaves,
     required this.turnsUsed,
@@ -176,6 +180,7 @@ class BattleOutcome {
     required this.unverified,
     this.failure,
     this.log = const [],
+    this.records = const [],
   });
 }
 

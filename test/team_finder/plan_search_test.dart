@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chaldea/app/battle/interactions/_delegate.dart';
 import 'package:chaldea/app/battle/models/battle.dart';
+import 'package:chaldea/app/battle/utils/battle_logger.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
 import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
@@ -68,6 +69,18 @@ void main() async {
     expect(out.totalNpDamage, greaterThan(1000000)); // the 798k boss alone
     expect(out.log.where((l) => l.contains(' np ')), isNotEmpty);
     expect(out.log.any((l) => l.contains(' swap ')), isTrue); // Oberon comes in at the end
+  });
+
+  test('a clear carries the engine records the Records panel draws: skills, NPs, per-enemy damage by wave', () async {
+    final out = await runner.run(team(strongAltria), node, search);
+    expect(out.clearedAllWaves, isTrue);
+    final r = out.records;
+    expect(r.whereType<BattleSkillRecord>(), isNotEmpty);
+    expect(r.whereType<BattleProgressWaveRecord>().length, 3);
+    expect(r.whereType<BattleProgressTurnRecord>().length, out.turnsUsed);
+    final np = r.whereType<BattleAttackRecord>().where((a) => a.card?.isTD == true);
+    expect(np, isNotEmpty);
+    expect(np.fold<int>(0, (s, a) => s + a.damage), out.totalNpDamage); // same numbers the result title shows
   });
 
   test('the solver finds the two-dealer clear whichever order the box lists the dealers in', () async {
