@@ -15,7 +15,7 @@ const int kMinBoxServants = 2;
 /// then searched in order of that margin, each with up to [kSearchTurnsPerTeam] turns, until the budget is
 /// spent. A team whose search finished is final; one that hit its cap or was never reached is reported as
 /// not settled (the request is [SolveProgress.truncated]).
-const int kSearchTurnBudget = 3000;
+const int kSearchTurnBudget = 4500;
 const int kSearchTurnsPerTeam = 400;
 
 /// The search's own optimistic check costs 3 turns; capped here the search does nothing else.
