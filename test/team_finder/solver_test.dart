@@ -158,18 +158,28 @@ void main() async {
       expect(last.truncated, isFalse);
     });
 
-    test('teams are searched likeliest first and the budget stops the rest', () async {
+    test('teams are searched likeliest first and the time budget stops the rest', () async {
       final slack = Map<TeamSpec, double>.identity();
       final searched = <double>[];
+      var clock = DateTime(2026);
       final runner = FakeRunner((team, plan) {
         if (!isSearch(plan)) return failed();
         final s = slack.putIfAbsent(team, () => slack.length.toDouble()); // a different margin per team
         if (capOf(plan) == kQuickCheckTurns) return stuck(s, kQuickCheckTurns);
         searched.add(s);
-        return stuck(s, kSearchTurnBudget ~/ 2);
+        clock = clock.add(const Duration(minutes: 1)); // every search takes a minute
+        return stuck(s, 400);
       });
-      final last = await solve(request(), runner).last;
-      expect(searched.length, 2); // two searches spend the budget
+      final req = SolveRequest(
+        region: Region.na,
+        quest: quest3,
+        box: fiveBox,
+        maxSims: 100000,
+        timeBudget: const Duration(minutes: 2),
+        now: () => clock,
+      );
+      final last = await solve(req, runner).last;
+      expect(searched.length, 2); // two searches spend the two minutes
       expect(searched, [...searched]..sort((a, b) => b.compareTo(a)));
       expect(searched.first, slack.length - 1); // the biggest margin went first
       expect(last.truncated, isTrue);

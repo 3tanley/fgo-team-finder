@@ -9,13 +9,13 @@ import 'turn_planner.dart';
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
-/// Simulated turns the plan search (plan_search.dart) may spend over a whole request (about 50 ms a turn, so a
-/// few minutes at most). Every team first gets the loop plan and the search's quick optimistic check, which
-/// also rates how likely the team is to hide a clear (the margin). The teams the check cannot rule out are
-/// then searched in order of that margin, each with up to [kSearchTurnsPerTeam] turns, until the budget is
-/// spent. A team whose search finished is final; one that hit its cap or was never reached is reported as
-/// not settled (the request is [SolveProgress.truncated]).
-const int kSearchTurnBudget = 4500;
+/// Wall-clock time a whole request may take (about 6 minutes). Every team first gets the loop plan and the
+/// search's quick optimistic check, which also rates how likely the team is to hide a clear (the margin). The
+/// teams the check cannot rule out are then searched in order of that margin, each with up to
+/// [kSearchTurnsPerTeam] turns, until the time is spent. No search starts after that, so a request ends at most
+/// one team's search (a few tens of seconds) late. A team whose search finished is final; one that hit its cap
+/// or was never reached is reported as not settled (the request is [SolveProgress.truncated]).
+const Duration kSolveTimeBudget = Duration(minutes: 6);
 const int kSearchTurnsPerTeam = 400;
 
 /// The search's own optimistic check costs 3 turns; capped here the search does nothing else.
@@ -62,6 +62,12 @@ class SolveRequest {
 
   /// Work cap: at most this many battle simulations, then the search stops and says it was truncated.
   final int maxSims;
+
+  /// When the search pass stops starting new team searches, counted from the start of [solve].
+  final Duration timeBudget;
+
+  /// The clock behind [timeBudget] (tests replace it).
+  final DateTime Function() now;
   bool _cancelled = false;
   SolveRequest({
     required this.region,
@@ -70,6 +76,8 @@ class SolveRequest {
     this.friends = const [],
     this.ces,
     this.maxSims = 20000,
+    this.timeBudget = kSolveTimeBudget,
+    this.now = DateTime.now,
   });
 
   void cancel() => _cancelled = true;
@@ -128,6 +136,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     return;
   }
 
+  final started = req.now();
   final teams = generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList();
   final results = <TeamResult>[];
   final unresolved = <TeamSpec>[];
@@ -196,19 +205,17 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     yield snapshot();
     // the teams with the most optimistic margin first: they are the likeliest to hide a clear
     unresolved.sort((a, b) => (slackOf[b] ?? 0).compareTo(slackOf[a] ?? 0));
-    var turnsLeft = kSearchTurnBudget;
     while (unresolved.isNotEmpty && !req.cancelled) {
-      if (turnsLeft <= 0 || sims >= req.maxSims) {
+      if (req.now().difference(started) >= req.timeBudget || sims >= req.maxSims) {
         truncated = true;
         nonViable += unresolved.length;
         unresolved.clear();
         break;
       }
       final team = unresolved.removeAt(0);
-      final plan = planTurns(team, searchSims: kSearchTurnsPerTeam.clamp(1, turnsLeft)).last; // the search plan
+      final plan = planTurns(team, searchSims: kSearchTurnsPerTeam).last; // the search plan
       final out = await runner.run(team, req.quest, plan);
       sims++;
-      turnsLeft -= out.searchTurns;
       if (out.clearedAllWaves) {
         addResult(resultOf(team, plan, out));
       } else {
