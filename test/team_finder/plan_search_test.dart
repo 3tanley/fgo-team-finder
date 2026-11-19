@@ -116,6 +116,20 @@ void main() async {
       expect(out.clearedAllWaves, isTrue, reason: out.failure ?? '');
       expect(out.searchTurns, greaterThan(3)); // not stopped by the quick check
     }, timeout: const Timeout(Duration(minutes: 2)));
+
+    test('choices that cannot fill the firing dealers\' gauges are dropped before any skill is used', () async {
+      final battle = BattleData();
+      final t = owner(CeSetup(eventCe), support: bond(altriaCaster));
+      final s = PlanSearch(battle, t, node, turns: 3, maxSims: 3000);
+      battle.delegate = BattleDelegate()..replaceMember = s.chooseSwap;
+      final mc = MysticCodeData()
+        ..mysticCode = db.gameData.mysticCodes[kDefaultMysticCodeId]!
+        ..level = 10;
+      await battle.init(node.phase, [for (final slot in t.slots) playerSvtDataFor(slot)], mc);
+      expect(await s.run(), isTrue);
+      // without the early drop this team used about 10 skill activations per turn played, with it about 4.5
+      expect(s.skillUses, lessThan(s.sims * 7));
+    }, timeout: const Timeout(Duration(minutes: 2)));
   });
 
   test('the solver finds the two-dealer clear whichever order the box lists the dealers in', () async {

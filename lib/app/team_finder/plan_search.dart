@@ -45,6 +45,9 @@ class PlanSearch {
   final int maxSims;
   int sims = 0;
 
+  /// Skill activations spent so far (the bulk of the engine time); [sims] counts the turns that were played.
+  int skillUses = 0;
+
   /// How far the quick optimistic play got: NP damage of that play over the quest's total HP. Teams with a
   /// bigger margin are likelier to have a clear, so the solver searches them first.
   double slack = 0;
@@ -221,7 +224,58 @@ class PlanSearch {
     return false;
   }
 
+  /// Function types that move a gauge by an amount that is not a flat one: a skill with one counts as unlimited.
+  static const _variableGauge = {
+    FuncType.gainNpBuffIndividualSum,
+    FuncType.gainNpFromTargets,
+    FuncType.gainNpIndividualSum,
+    FuncType.gainMultiplyNp,
+    FuncType.gainNpTargetSum,
+    FuncType.gainNpCriticalstarSum,
+    FuncType.gainNpFromOtherUsedNpValue,
+  };
+
+  /// False if the firing dealers' gauges cannot all reach 100% however the ready skills are used: a dealer's gauge
+  /// now plus every NP charge in reach (a skill's charge is a flat amount, each skill is used once) stays under
+  /// it. The skills used before the charges (the buffs that last, the outgoing servant's) do not touch gauges, so
+  /// a choice that fails this fails after using them too, and [_play] drops it without using any. [swap] adds the
+  /// incoming servant's skills, which take the outgoing one's slot.
+  bool _canFill(List<int> firing, (int, int)? swap) {
+    if (firing.isEmpty) return true;
+    final incoming = swap == null ? null : battle.backupAllyServants.firstWhereOrNull((s) => s?.uniqueId == swap.$2);
+    final owners = <(int, Iterable<BattleSkillInfoData>)>[
+      for (var i = 0; i < 3; i++)
+        if (_svt(i) case final s?) (i, s.skillInfoList),
+      if (incoming != null) (swap!.$1, incoming.skillInfoList),
+      (-1, battle.masterSkillInfo),
+    ];
+    for (final id in firing) {
+      final slot = id == swap?.$2 ? swap!.$1 : _slotOf(id);
+      final svt = id == swap?.$2 ? incoming : _svt(slot);
+      if (slot < 0 || svt == null) return true; // not understood: leave it to the real play
+      var gauge = svt.np;
+      for (final (src, infos) in owners) {
+        for (final info in infos.where((i) => i.chargeTurn <= 0)) {
+          for (final f in info.skill?.functions ?? const <NiceFunction>[]) {
+            if (f.funcTargetTeam == FuncApplyTarget.enemy || f.funcTargetType.isEnemy) continue;
+            if (_variableGauge.contains(f.funcType)) return true;
+            if (f.funcType != FuncType.gainNp) continue;
+            final reaches = switch (f.funcTargetType) {
+              FuncTargetType.self => src == slot,
+              FuncTargetType.ptOther || FuncTargetType.ptAnother || FuncTargetType.ptOneOther => src != slot,
+              _ => true,
+            };
+            if (reaches) gauge += (f.svals.getOrNull(info.skillLv - 1) ?? f.svals.firstOrNull)?.Value ?? 0;
+          }
+        }
+      }
+      if (gauge < 10000) return false;
+    }
+    return true;
+  }
+
   Future<void> _use(_Skill k, int target, int tn) async {
+    skillUses++;
     battle.playerTargetIndex = target;
     if (k.src < 0) {
       await battle.activateMysticCodeSkill(k.idx);
@@ -362,6 +416,7 @@ class PlanSearch {
     final tn = t + 1;
     final last = t == turns - 1;
     final start = log.length;
+    if (!_canFill(firing, swap)) return false; // dead before any skill is used (most skill uses went to such choices)
     // single-target skills go to the primary dealer; before it is on the field, to another main dealer
     int target() {
       final p = _slotOf(primary);
