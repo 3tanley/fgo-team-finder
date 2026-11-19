@@ -200,7 +200,7 @@ void main() async {
       expect(seen, expected);
     });
 
-    test('the quick pass stops at half the time; the search still gets the other half', () async {
+    test('the quick pass stops at a quarter of the time; the search still gets the rest', () async {
       var clock = DateTime(2026);
       var searches = 0;
       final runner = FakeRunner((team, plan) {
@@ -223,6 +223,58 @@ void main() async {
       expect(last.truncated, isTrue);
       expect(searches, greaterThan(0)); // the teams found by then were still searched
       expect(clock.difference(DateTime(2026)).inMinutes, lessThanOrEqualTo(11)); // ended about on time
+    });
+
+    test('too many teams for the full cap: a short round first, then the full cap for the teams that hit it', () async {
+      var clock = DateTime(2026);
+      final caps = <int>[];
+      final runner = FakeRunner((team, plan) {
+        if (!isSearch(plan)) {
+          clock = clock.add(const Duration(seconds: 1)); // only the quick pass takes time
+          return failed();
+        }
+        if (capOf(plan) == kQuickCheckTurns) {
+          clock = clock.add(const Duration(seconds: 1));
+          return stuck(1, kQuickCheckTurns);
+        }
+        caps.add(capOf(plan));
+        if (capOf(plan) == kSearchTurnsPerTeam && caps.length > 3) {
+          return const BattleOutcome(
+            clearedAllWaves: true,
+            turnsUsed: 3,
+            totalNpDamage: 5,
+            unverified: false,
+            searchTurns: 100,
+          );
+        }
+        return stuck(1, capOf(plan));
+      });
+      final req = SolveRequest(
+        region: Region.na,
+        quest: quest3,
+        box: fiveBox,
+        maxSims: 100000,
+        timeBudget: const Duration(minutes: 5),
+        now: () => clock,
+      );
+      final last = await solve(req, runner).last;
+      final firstRound = caps.takeWhile((c) => c == kFirstSearchTurns).length;
+      expect(firstRound, greaterThan(1));
+      expect(caps.skip(firstRound), everyElement(kSearchTurnsPerTeam)); // the full cap only after every short one
+      expect(caps.where((c) => c == kSearchTurnsPerTeam).length, firstRound); // each short one is retried once
+      expect(last.results, isNotEmpty); // a clear that needs the full cap is still found
+    });
+
+    test('few teams, so every one gets the full cap straight away', () async {
+      final caps = <int>[];
+      final runner = FakeRunner((team, plan) {
+        if (!isSearch(plan)) return failed();
+        if (capOf(plan) == kQuickCheckTurns) return stuck(1, kQuickCheckTurns);
+        caps.add(capOf(plan));
+        return stuck(1, 5);
+      });
+      await solve(request(), runner).last; // the clock does not move: the quick pass looked free
+      expect(caps, everyElement(kSearchTurnsPerTeam));
     });
 
     test('a clear found in the search pass is reported, with its damage', () async {

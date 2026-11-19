@@ -10,7 +10,7 @@ import 'turn_planner.dart';
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
-/// Wall-clock time a whole request may take (about 6 minutes; the quick pass below gets at most the first half).
+/// Wall-clock time a whole request may take (about 6 minutes; the quick pass below gets at most the first quarter).
 /// Every team first gets the loop plan and the
 /// search's quick optimistic check, which also rates how likely the team is to hide a clear (the margin). The
 /// teams the check cannot rule out are then searched in order of that margin, each with up to
@@ -19,6 +19,21 @@ const int kMinBoxServants = 2;
 /// or was never reached is reported as not settled (the request is [SolveProgress.truncated]).
 const Duration kSolveTimeBudget = Duration(minutes: 6);
 const int kSearchTurnsPerTeam = 400;
+
+/// The quick pass stops after 1/[kQuickTimeDivisor] of the time. A big box has more teams than it can check; the
+/// teams the priority order puts first are the ones worth checking, and the search needs the rest of the time.
+const int kQuickTimeDivisor = 4;
+
+/// When there are too many teams to give each the full [kSearchTurnsPerTeam] in the time left, every team is first
+/// searched for only [kFirstSearchTurns] turns (a clear usually turns up within them: 14 of the 18 clears on the
+/// test node did), and only the teams that hit that cap are searched again with the full cap, in the same order.
+/// A team's result is the same either way if time allows; the rounds only decide who is reached first.
+const int kFirstSearchTurns = 60;
+
+/// How much one full search costs, in quick checks (about 118 search turns against 8 turns' worth of time for a
+/// quick check on the test node), to guess from the quick pass's speed whether the full cap fits every team.
+/// A wrong guess only changes the order, never a result.
+const int kFullSearchInQuickChecks = 15;
 
 /// The search's own optimistic check costs 3 turns; capped here the search does nothing else.
 const int kQuickCheckTurns = 3;
@@ -143,6 +158,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   final teams = prioritized(generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList(), req.quest);
   final results = <TeamResult>[];
   final unresolved = <TeamSpec>[];
+  final later = <TeamSpec>[]; // searched at the short cap without a verdict, waiting for the full cap
   final slackOf = <TeamSpec, double>{};
   var nonViable = 0, sims = 0, done = 0;
   var truncated = false;
@@ -155,7 +171,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     truncated: truncated,
     cancelled: req.cancelled,
     finished: finished,
-    unresolved: unresolved.length,
+    unresolved: unresolved.length + later.length,
   );
   TeamResult resultOf(TeamSpec team, TurnPlan plan, BattleOutcome out) => TeamResult(
     team: team,
@@ -169,14 +185,14 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     ..add(r)
     ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
 
-  // Quick pass: every team gets the loop and the optimistic check (no search yet), for at most half the time.
+  // Quick pass: every team gets the loop and the optimistic check (no search yet), for at most a quarter of the time.
   // A big box that does not fit stops here (teams left unchecked, reported as truncated) and the search pass
-  // still gets the other half for the teams found so far.
+  // still gets the rest of the time for the teams found so far.
   var screenTimedOut = false;
   screening:
   for (final team in teams) {
     if (req.cancelled) break;
-    if (req.now().difference(started) >= req.timeBudget ~/ 2) {
+    if (req.now().difference(started) >= req.timeBudget ~/ kQuickTimeDivisor) {
       screenTimedOut = true;
       truncated = true;
       break;
@@ -216,7 +232,16 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     yield snapshot();
     // the teams with the most optimistic margin first: they are the likeliest to hide a clear
     unresolved.sort((a, b) => (slackOf[b] ?? 0).compareTo(slackOf[a] ?? 0));
-    while (unresolved.isNotEmpty && !req.cancelled) {
+    // too many teams for the full cap each in the time left (judged from how fast the quick pass went): two rounds
+    final spent = req.now().difference(started);
+    final perCheck = done == 0 ? Duration.zero : spent ~/ done;
+    final twoRounds = perCheck * kFullSearchInQuickChecks * unresolved.length > req.timeBudget - spent;
+    final retried = <TeamSpec>{};
+    while ((unresolved.isNotEmpty || later.isNotEmpty) && !req.cancelled) {
+      if (unresolved.isEmpty) {
+        unresolved.addAll(later);
+        later.clear();
+      }
       if (req.now().difference(started) >= req.timeBudget || sims >= req.maxSims) {
         truncated = true;
         nonViable += unresolved.length;
@@ -224,11 +249,15 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
         break;
       }
       final team = unresolved.removeAt(0);
-      final plan = planTurns(team, searchSims: kSearchTurnsPerTeam).last; // the search plan
+      final cap = twoRounds && !retried.contains(team) ? kFirstSearchTurns : kSearchTurnsPerTeam;
+      final plan = planTurns(team, searchSims: cap).last; // the search plan
       final out = await runner.run(team, req.quest, plan);
       sims++;
       if (out.clearedAllWaves) {
         addResult(resultOf(team, plan, out));
+      } else if (cap < kSearchTurnsPerTeam && out.searchCapped) {
+        retried.add(team);
+        later.add(team); // not settled at the short cap: again with the full cap once the others have had a go
       } else {
         nonViable++;
         if (out.searchCapped) truncated = true;
