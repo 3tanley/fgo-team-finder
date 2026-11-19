@@ -6,6 +6,8 @@ import 'package:chaldea/app/team_finder/battle_runner.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
+import 'package:chaldea/app/team_finder/team_generator.dart';
+import 'package:chaldea/app/team_finder/team_priority.dart';
 import 'package:chaldea/app/team_finder/turn_planner.dart';
 import 'package:chaldea/models/models.dart';
 
@@ -185,6 +187,42 @@ void main() async {
       expect(last.truncated, isTrue);
       expect(last.unresolved, 0);
       expect(last.results.length + last.nonViable, last.teamsTotal);
+    });
+
+    test('teams are checked in priority order, every team still once', () async {
+      final seen = <String>[];
+      final runner = FakeRunner((team, plan) {
+        if (seen.isEmpty || seen.last != team.key) seen.add(team.key);
+        return failed();
+      });
+      await solve(request(), runner).last;
+      final expected = prioritized(generateTeams(fiveBox, Region.na).toList(), quest3).map((t) => t.key).toList();
+      expect(seen, expected);
+    });
+
+    test('the quick pass stops at half the time; the search still gets the other half', () async {
+      var clock = DateTime(2026);
+      var searches = 0;
+      final runner = FakeRunner((team, plan) {
+        clock = clock.add(const Duration(minutes: 1)); // every run takes a minute
+        if (!isSearch(plan)) return failed();
+        if (capOf(plan) == kQuickCheckTurns) return stuck(1, kQuickCheckTurns);
+        searches++;
+        return stuck(1, 400);
+      });
+      final req = SolveRequest(
+        region: Region.na,
+        quest: quest3,
+        box: fiveBox,
+        maxSims: 100000,
+        timeBudget: const Duration(minutes: 10),
+        now: () => clock,
+      );
+      final last = await solve(req, runner).last;
+      expect(last.teamsDone, lessThan(last.teamsTotal)); // not every team was reached
+      expect(last.truncated, isTrue);
+      expect(searches, greaterThan(0)); // the teams found by then were still searched
+      expect(clock.difference(DateTime(2026)).inMinutes, lessThanOrEqualTo(11)); // ended about on time
     });
 
     test('a clear found in the search pass is reported, with its damage', () async {

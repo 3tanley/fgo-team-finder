@@ -4,12 +4,14 @@ import 'package:chaldea/models/models.dart' show Region;
 import 'battle_runner.dart';
 import 'models.dart';
 import 'team_generator.dart';
+import 'team_priority.dart';
 import 'turn_planner.dart';
 
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
-/// Wall-clock time a whole request may take (about 6 minutes). Every team first gets the loop plan and the
+/// Wall-clock time a whole request may take (about 6 minutes; the quick pass below gets at most the first half).
+/// Every team first gets the loop plan and the
 /// search's quick optimistic check, which also rates how likely the team is to hide a clear (the margin). The
 /// teams the check cannot rule out are then searched in order of that margin, each with up to
 /// [kSearchTurnsPerTeam] turns, until the time is spent. No search starts after that, so a request ends at most
@@ -137,7 +139,8 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   }
 
   final started = req.now();
-  final teams = generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList();
+  // likeliest first (see teamPriority), so a big box that runs out of time has checked the best fits
+  final teams = prioritized(generateTeams(req.box, req.region, friends: req.friends, ces: req.ces).toList(), req.quest);
   final results = <TeamResult>[];
   final unresolved = <TeamSpec>[];
   final slackOf = <TeamSpec, double>{};
@@ -166,10 +169,18 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     ..add(r)
     ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
 
-  // Quick pass: every team gets the loop and the optimistic check (no search yet).
+  // Quick pass: every team gets the loop and the optimistic check (no search yet), for at most half the time.
+  // A big box that does not fit stops here (teams left unchecked, reported as truncated) and the search pass
+  // still gets the other half for the teams found so far.
+  var screenTimedOut = false;
   screening:
   for (final team in teams) {
     if (req.cancelled) break;
+    if (req.now().difference(started) >= req.timeBudget ~/ 2) {
+      screenTimedOut = true;
+      truncated = true;
+      break;
+    }
     TeamResult? best;
     var capped = false;
     for (final plan in planTurns(team, searchSims: kQuickCheckTurns)) {
@@ -201,7 +212,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   }
 
   // Search pass: the teams the quick check could not rule out, likeliest first, out of a shared budget.
-  if (done == teams.length) {
+  if (done == teams.length || screenTimedOut) {
     yield snapshot();
     // the teams with the most optimistic margin first: they are the likeliest to hide a clear
     unresolved.sort((a, b) => (slackOf[b] ?? 0).compareTo(slackOf[a] ?? 0));

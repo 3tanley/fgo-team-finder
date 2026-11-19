@@ -379,4 +379,20 @@ void main() async {
       expect(() => CeSetup(eventCe, quantity: 0), throwsArgumentError);
     });
   });
+
+  test('a servant listed twice with the same stats makes no repeated team', () {
+    final twice = box([altria, castoria, altria]);
+    final teams = generateTeams(twice, Region.na).toList();
+    expect(teams.map((t) => t.key).toSet().length, teams.length);
+    // the same teams as the box without the repeat, plus none of its own (it only adds the Altria + Altria pair)
+    final once = generateTeams(box([altria, castoria]), Region.na).map((t) => t.key).toSet();
+    expect(teams.map((t) => t.key).toSet().containsAll(once), isTrue);
+  });
+
+  test('the same servant at different stats is a different team', () {
+    final other = ServantSetup(svtId: altria, level: 80);
+    final teams = generateTeams([ServantSetup.defaults(altria), other, ServantSetup.defaults(castoria)], Region.na);
+    expect(teams.map((t) => t.key).toSet().length, teams.length);
+    expect(teams.any((t) => t.slots.any((s) => s.servant.level == 80)), isTrue);
+  });
 }

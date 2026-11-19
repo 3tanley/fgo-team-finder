@@ -38,15 +38,11 @@ class ServantSetup {
 
   factory ServantSetup.defaults(int svtId) => ServantSetup(svtId: svtId);
 
+  /// Every stat in one string: equal keys = the same servant as far as a battle can tell.
+  String get key => '$svtId/$level/$npLevel/$atkFou/$hpFou/${skillLevels.join(',')}/${appendLevels.join(',')}';
+
   /// True if every stat is the same (two such box entries make equivalent teams).
-  bool sameAs(ServantSetup o) =>
-      svtId == o.svtId &&
-      level == o.level &&
-      npLevel == o.npLevel &&
-      atkFou == o.atkFou &&
-      hpFou == o.hpFou &&
-      skillLevels.join(',') == o.skillLevels.join(',') &&
-      appendLevels.join(',') == o.appendLevels.join(',');
+  bool sameAs(ServantSetup o) => key == o.key;
 }
 
 class CeSetup {
@@ -63,7 +59,9 @@ class CeSetup {
     if (quantity < 1 || quantity > 5) throw ArgumentError.value(quantity, 'quantity', 'must be 1..5');
   }
 
-  bool sameAs(CeSetup o) => ceId == o.ceId && level == o.level && limitBreak == o.limitBreak;
+  String get key => '$ceId/$level/$limitBreak';
+
+  bool sameAs(CeSetup o) => key == o.key;
 }
 
 class MysticCodeSetup {
@@ -101,6 +99,8 @@ class SlotSpec {
   final ServantSetup servant;
   final CeSetup? ce;
   const SlotSpec(this.servant, {this.ce});
+
+  String get key => '${servant.key}+${ce?.key}';
 }
 
 /// Up to 6 servants: indices 0-2 start on the field, 3-5 start in the back row.
@@ -110,6 +110,9 @@ class TeamSpec {
   TeamSpec(this.slots, {this.mysticCode}) {
     if (slots.isEmpty || slots.length > 6) throw ArgumentError.value(slots.length, 'slots', 'need 1..6 servants');
   }
+
+  /// Equal keys = the same battle: the same servants and CEs in the same slots with the same mystic code.
+  String get key => '${slots.map((s) => s.key).join('|')}#${mysticCode?.id}/${mysticCode?.level}';
 }
 
 sealed class TurnAction {

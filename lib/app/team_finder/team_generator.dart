@@ -36,7 +36,22 @@ CardType? npCardType(int svtId) {
 /// NP card rule is not applied: the choice is the user's.
 /// shortcut: one slot order (support first, box order after); when a swap-in exists, teams without it are
 /// not generated (the swap only adds skills on the last wave).
+///
+/// A team that is exactly the same battle as an earlier one (same servants, stats, CEs and slots; this happens
+/// when the box lists a servant twice with the same stats) is yielded once, so it is never simulated twice.
 Iterable<TeamSpec> generateTeams(
+  List<ServantSetup> box,
+  Region region, {
+  List<ServantSetup> friends = const [],
+  List<CeSetup>? ces,
+}) sync* {
+  final seen = <String>{};
+  for (final team in _allTeams(box, region, friends: friends, ces: ces)) {
+    if (seen.add(team.key)) yield team;
+  }
+}
+
+Iterable<TeamSpec> _allTeams(
   List<ServantSetup> box,
   Region region, {
   List<ServantSetup> friends = const [],
