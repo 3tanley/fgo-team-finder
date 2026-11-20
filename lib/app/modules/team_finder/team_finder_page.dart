@@ -508,7 +508,68 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     showDialog<void>(
       context: context,
       builder: (context) => Dialog(
-        child: SingleChildScrollView(child: BattleRecorderPanel(records: r.records)),
+        child: SingleChildScrollView(
+          child: Column(children: [_teamComp(r.team), BattleRecorderPanel(records: r.records)]),
+        ),
+      ),
+    );
+  }
+
+  /// The team as it starts: frontline and backup servants, each with its CE, then the mystic code.
+  Widget _teamComp(TeamSpec team) {
+    Widget slot(SlotSpec s) {
+      final svt = db.gameData.servantsById[s.servant.svtId];
+      final ce = s.ce;
+      return SizedBox(
+        width: 84,
+        child: Column(
+          children: [
+            svt?.iconBuilder(context: context, width: 72, jumpToDetail: false) ?? const SizedBox(height: 72),
+            Text(
+              'Lv.${s.servant.level} NP${s.servant.npLevel}\n${s.servant.skillLevels.join('/')}',
+              style: const TextStyle(fontSize: 11),
+              textAlign: TextAlign.center,
+            ),
+            Text(_svtName(s.servant.svtId), style: const TextStyle(fontSize: 12), textAlign: TextAlign.center),
+            const SizedBox(height: 4),
+            if (ce == null)
+              const SizedBox(height: 40, child: Center(child: Text('no CE', style: TextStyle(fontSize: 11))))
+            else ...[
+              db.gameData.craftEssencesById[ce.ceId]?.iconBuilder(context: context, width: 72, jumpToDetail: false) ??
+                  const SizedBox(height: 40),
+              Text(ceLabel(ce.ceId), style: const TextStyle(fontSize: 11), textAlign: TextAlign.center),
+              Text('Lv.${ce.level}', style: const TextStyle(fontSize: 11)),
+            ],
+          ],
+        ),
+      );
+    }
+
+    Widget group(String title, List<SlotSpec> slots) => Column(
+      children: [
+        Text(title, style: Theme.of(context).textTheme.titleSmall),
+        const SizedBox(height: 4),
+        Wrap(spacing: 8, runSpacing: 8, alignment: WrapAlignment.center, children: [for (final s in slots) slot(s)]),
+      ],
+    );
+
+    final mc = team.mysticCode;
+    final code = mc == null ? null : db.gameData.mysticCodes[mc.id];
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        children: [
+          group('Frontline', team.slots.take(3).toList()),
+          if (team.slots.length > 3) ...[const SizedBox(height: 12), group('Backup', team.slots.skip(3).toList())],
+          if (mc != null) ...[
+            const SizedBox(height: 12),
+            Text('Mystic Code', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            code?.iconBuilder(context: context, width: 48, jumpToDetail: false) ?? const SizedBox.shrink(),
+            Text('${code?.lName.l ?? '#${mc.id}'}  Lv.${mc.level}', style: const TextStyle(fontSize: 12)),
+          ],
+          const Divider(),
+        ],
       ),
     );
   }

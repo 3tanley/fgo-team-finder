@@ -435,5 +435,14 @@ void main() async {
     );
     await tester.pumpAndSettle();
     expect(find.byType(BattleRecorderPanel), findsOneWidget);
+    // the team as it starts sits above the Records: groups, CE per servant, mystic code
+    expect(find.text('Frontline'), findsOneWidget);
+    expect(find.text('Mystic Code'), findsOneWidget);
+    expect(find.textContaining('Lv.'), findsWidgets);
+    // the icons' image loaders queue timers in a rate limiter: let the queue run dry
+    for (var i = 0; i < 5; i++) {
+      await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 400)));
+      await tester.pump(const Duration(seconds: 5));
+    }
   });
 }
