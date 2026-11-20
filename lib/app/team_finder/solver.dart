@@ -31,9 +31,11 @@ const int kSearchTurnsPerTeam = 400;
 const int kTopRankedTeams = 40;
 const int kTopSearchTurns = 1500;
 
-/// The share of the time left after the quick pass that the broad first search round may use. What is left goes to
-/// searching the best-ranked teams that hit their cap again, with bigger caps.
-const double kBroadSearchShare = 0.4;
+/// The share of the time left after the quick pass that the broad first search round may use; what is left goes to
+/// searching the best-ranked teams that hit their cap again, with bigger caps. 1 = the broad round may use all of it,
+/// so the deeper rounds only run once every team has had its first search. Measured on a 24-servant box for 10
+/// minutes: 0.4 found 4 clears, 1.0 found 8, so the broad round comes first.
+const double kBroadSearchShare = 1.0;
 
 /// A clear that deals at least this many times the quest's total HP has damage to spare: it is tried again with a drop
 /// CE on everyone and no damage CE (Black Grail, event damage CE), and that version replaces it if it clears too.
@@ -105,6 +107,9 @@ class SolveRequest {
   /// How many of the best-ranked teams get the big search cap ([kTopSearchTurns]).
   final int topRanked;
 
+  /// The share of the time left after the quick pass that the broad first search round may use.
+  final double broadShare;
+
   /// The clock behind [timeBudget] (tests replace it).
   final DateTime Function() now;
   bool _cancelled = false;
@@ -117,6 +122,7 @@ class SolveRequest {
     this.maxSims = 20000,
     this.timeBudget = kSolveTimeBudget,
     this.topRanked = kTopRankedTeams,
+    this.broadShare = kBroadSearchShare,
     this.now = DateTime.now,
   });
 
@@ -310,11 +316,11 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     final perCheck = done == 0 ? Duration.zero : spent ~/ done;
     final twoRounds = perCheck * kFullSearchInQuickChecks * unresolved.length > req.timeBudget - spent;
     // a team that hits its cap without a verdict is searched again with the next cap; only the top ranks get the
-    // last, big one. The broad first round gets just [kBroadSearchShare] of the time, so the deeper rounds are always
-    // reached; the teams it did not get to wait until those are done.
+    // last, big one. The broad first round may be limited to [kBroadSearchShare] of the time, so that the deeper rounds
+    // are reached; the teams it did not get to wait until those are done.
     final ladder = [if (twoRounds) kFirstSearchTurns, kSearchTurnsPerTeam, kTopSearchTurns];
     final step = <TeamSpec, int>{};
-    final broadEnd = spent + (req.timeBudget - spent) * kBroadSearchShare;
+    final broadEnd = spent + (req.timeBudget - spent) * req.broadShare;
     while ((unresolved.isNotEmpty || later.isNotEmpty) && !req.cancelled) {
       if (req.now().difference(started) >= req.timeBudget || sims >= req.maxSims) {
         truncated = true;

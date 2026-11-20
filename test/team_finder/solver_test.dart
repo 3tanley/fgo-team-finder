@@ -270,7 +270,7 @@ void main() async {
       expect(last.results, isNotEmpty); // a clear that needs the full cap is still found
     });
 
-    test('the broad first round gets only part of the time, so the deeper rounds are reached', () async {
+    test('a limited broad first round leaves time for the deeper rounds', () async {
       var clock = DateTime(2026);
       final caps = <int>[];
       final runner = FakeRunner((team, plan) {
@@ -286,6 +286,7 @@ void main() async {
         box: fiveBox,
         maxSims: 100000,
         timeBudget: const Duration(minutes: 10),
+        broadShare: 0.4,
         now: () => clock,
       );
       final last = await solve(req, runner).last;
