@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chaldea/app/team_finder/battle_runner.dart';
+import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
@@ -327,6 +328,39 @@ void main() async {
       expect(last.results, isNotEmpty);
       expect(last.results.first.totalNpDamage, 777);
       expect(last.nonViable, 0);
+    });
+  });
+
+  group('a clear with damage to spare is tried again on drop CEs only', () {
+    const dec = 9408210; // December 23rd, a drop CE
+    SolveRequest withCes() => SolveRequest(
+      region: Region.na,
+      quest: quest3,
+      box: fiveBox,
+      maxSims: 100000,
+      ces: [CeSetup(kBlackGrailCeId), CeSetup(dec, level: 1, quantity: 3)],
+    );
+    bool hasBlackGrail(TeamSpec t) => t.slots.any((s) => s.ce?.ceId == kBlackGrailCeId);
+    final huge = 1 << 40;
+
+    test('the drop-CE version replaces the Black Grail one when it clears too', () async {
+      final last = await solve(withCes(), FakeRunner((_, _) => cleared(huge))).last;
+      expect(last.results, isNotEmpty);
+      expect(last.results.any((r) => hasBlackGrail(r.team)), isFalse);
+      expect(last.results.any((r) => r.team.slots.any((s) => s.ce?.ceId == dec)), isTrue);
+    });
+
+    test('the Black Grail result stays when the drop-CE version does not clear', () async {
+      final runner = FakeRunner((team, _) => hasBlackGrail(team) ? cleared(huge) : failed());
+      final last = await solve(withCes(), runner).last;
+      expect(last.results.every((r) => hasBlackGrail(r.team)), isTrue);
+    });
+
+    test('without damage to spare there is no retry', () async {
+      final runner = FakeRunner((_, _) => cleared(1));
+      final last = await solve(withCes(), runner).last;
+      expect(last.results.every((r) => hasBlackGrail(r.team)), isTrue);
+      expect(runner.calls, last.teamsTotal * 2); // the loop and the quick check of each team, nothing more
     });
   });
 

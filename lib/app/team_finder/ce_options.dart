@@ -28,3 +28,9 @@ const _dropFuncs = {FuncType.eventDropUp, FuncType.eventDropRateUp};
 
 /// True if the CE raises an event's drop count (see [CeKind]).
 bool raisesDrops(CraftEssence ce) => ce.skills.any((s) => s.functions.any((f) => _dropFuncs.contains(f.funcType)));
+
+/// [raisesDrops] by CE id (false for an unknown id).
+bool raisesDropsId(int ceId) {
+  final ce = db.gameData.craftEssencesById[ceId];
+  return ce != null && raisesDrops(ce);
+}

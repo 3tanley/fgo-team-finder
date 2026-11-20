@@ -2,6 +2,7 @@ import 'package:chaldea/app/battle/utils/battle_logger.dart' show BattleRecord;
 import 'package:chaldea/models/models.dart' show Region;
 
 import 'battle_runner.dart';
+import 'ce_options.dart';
 import 'models.dart';
 import 'team_generator.dart';
 import 'team_priority.dart';
@@ -33,6 +34,10 @@ const int kTopSearchTurns = 1500;
 /// The share of the time left after the quick pass that the broad first search round may use. What is left goes to
 /// searching the best-ranked teams that hit their cap again, with bigger caps.
 const double kBroadSearchShare = 0.4;
+
+/// A clear that deals at least this many times the quest's total HP has damage to spare: it is tried again with a drop
+/// CE on everyone and no damage CE (Black Grail, event damage CE), and that version replaces it if it clears too.
+const int kOverkillFactor = 2;
 
 /// The quick pass stops after 1/[kQuickTimeDivisor] of the time. A big box has more teams than it can check; the
 /// teams the priority order puts first are the ones worth checking, and the search needs the rest of the time.
@@ -222,9 +227,37 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     );
   }
 
-  void addResult(TeamResult r) => results
-    ..add(r)
-    ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
+  final totalHp = req.quest.waves.expand((w) => w.enemies).fold<int>(0, (sum, e) => sum + e.hp);
+  final dropCes = [
+    for (final ce in req.ces ?? const <CeSetup>[])
+      if (raisesDropsId(ce.ceId))
+        for (var n = 0; n < ce.quantity; n++) ce,
+  ];
+
+  /// The same team with a drop CE on every servant after the support and no damage CE, when [r] cleared with damage
+  /// to spare and carried a damage CE; null when there is nothing to take away, no time, or that team does not clear.
+  Future<TeamResult?> withoutDamageCes(TeamResult r) async {
+    final slots = r.team.slots;
+    final hasDamageCe = slots.skip(1).any((s) => s.ce != null && !raisesDropsId(s.ce!.ceId));
+    if (r.totalNpDamage < kOverkillFactor * totalHp || dropCes.isEmpty || !hasDamageCe) return null;
+    if (req.cancelled || sims >= req.maxSims || req.now().difference(started) >= req.timeBudget) return null;
+    var next = 0;
+    final variant = TeamSpec([
+      slots.first,
+      for (final s in slots.skip(1)) SlotSpec(s.servant, ce: next < dropCes.length ? dropCes[next++] : null),
+    ], mysticCode: r.team.mysticCode);
+    final plan = planTurns(variant, searchSims: kSearchTurnsPerTeam).last;
+    final out = await runner.run(variant, req.quest, plan);
+    sims++;
+    return out.clearedAllWaves ? resultOf(variant, plan, out) : null;
+  }
+
+  Future<void> addResult(TeamResult r) async {
+    final better = await withoutDamageCes(r);
+    results
+      ..add(better ?? r)
+      ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
+  }
 
   // Quick pass: every team gets the loop and the optimistic check (no search yet), for at most a quarter of the time.
   // A big box that does not fit stops here (teams left unchecked, reported as truncated) and the search pass
@@ -244,7 +277,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
       if (req.cancelled) break screening;
       if (sims >= req.maxSims) {
         truncated = true;
-        if (best != null) addResult(best);
+        if (best != null) await addResult(best);
         break screening;
       }
       final out = await runner.run(team, req.quest, plan);
@@ -257,7 +290,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     }
     done++;
     if (best != null) {
-      addResult(best);
+      await addResult(best);
     } else if (capped) {
       unresolved.add(team); // not ruled out: the search ran out of its cap before it had tried everything
     } else {
@@ -308,7 +341,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
       final out = await runner.run(team, req.quest, plan);
       sims++;
       if (out.clearedAllWaves) {
-        addResult(resultOf(team, plan, out));
+        await addResult(resultOf(team, plan, out));
       } else if (out.searchCapped &&
           at + 1 < ladder.length &&
           (at + 2 < ladder.length || rankOf[team]! < req.topRanked)) {
