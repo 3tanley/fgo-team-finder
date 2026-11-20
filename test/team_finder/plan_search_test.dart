@@ -13,6 +13,7 @@ import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/plan_search.dart';
 import 'package:chaldea/app/team_finder/quest_loader.dart';
+import 'package:chaldea/app/team_finder/turn_planner.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
 import 'package:chaldea/models/models.dart';
 
@@ -226,4 +227,26 @@ void main() async {
     expect(out.turnsUsed, 3); // 3 waves, one dies per turn
     expect(out.log.any((l) => l.contains(' swap ')), isTrue);
   });
+
+  test('a team with several back-row servants is ruled out only when every one of them is', () async {
+    ServantSetup built(int id) =>
+        ServantSetup(svtId: id, level: 120, npLevel: 5, atkFou: 2000, hpFou: 2000, appendLevels: [0, 10, 0, 0, 10]);
+    final front = [
+      SlotSpec(ServantSetup.defaults(altriaCaster), ce: bond(altriaCaster)),
+      SlotSpec(built(2300500), ce: CeSetup(eventCe, level: 1)),
+      SlotSpec(built(3300100), ce: CeSetup(eventCe, level: 1)),
+    ];
+    final backs = [oberon, koyanskaya, altriaSaber];
+    TeamSpec withBacks(List<int> ids) => TeamSpec([
+      ...front,
+      for (final id in ids) SlotSpec(ServantSetup.defaults(id), ce: CeSetup(eventCe, level: 1)),
+    ], mysticCode: MysticCodeSetup(kDefaultMysticCodeId));
+    Future<BattleOutcome> quick(TeamSpec t) => runner.run(t, node, planTurns(t, searchSims: 3).last);
+    final together = await quick(withBacks(backs));
+    final alone = [
+      for (final b in backs) await quick(withBacks([b])),
+    ];
+    expect(together.searchCapped, alone.any((o) => o.searchCapped));
+    expect(together.searchSlack, closeTo(alone.map((o) => o.searchSlack).reduce((a, b) => a > b ? a : b), 1e-9));
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }

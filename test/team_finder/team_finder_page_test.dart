@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chaldea/app/modules/battle/simulation/recorder.dart';
 import 'package:chaldea/app/modules/team_finder/team_finder_controller.dart';
+import 'package:chaldea/app/team_finder/solver.dart';
 import 'package:chaldea/app/modules/team_finder/team_finder_page.dart';
 import 'package:chaldea/app/team_finder/battle_runner.dart';
 import 'package:chaldea/app/team_finder/defaults.dart';
@@ -33,13 +34,18 @@ void main() async {
   final quest = questSpecFromPhase(db.gameData.questPhases[9300040603]!);
   const ids = [100100, 504500, 500900, 100500, 200100];
 
-  Future<TeamFinderController> pump(WidgetTester tester, {int servants = 0, bool withQuest = false}) async {
+  Future<TeamFinderController> pump(
+    WidgetTester tester, {
+    int servants = 0,
+    bool withQuest = false,
+    int longSearchTeams = kLongSearchTeams,
+  }) async {
     // A ListView only builds what is on screen, so use a tall surface to see the whole page.
     tester.view.physicalSize = const Size(800, 4000);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    final c = TeamFinderController(runner: _FakeRunner());
+    final c = TeamFinderController(runner: _FakeRunner(), longSearchTeams: longSearchTeams);
     for (final id in ids.take(servants)) {
       c.upsertServant(ServantSetup.defaults(id));
     }
@@ -100,6 +106,32 @@ void main() async {
     final damages = titles.map(damage).toList();
     expect(damages, [...damages]..sort((a, b) => b.compareTo(a)));
     expect(find.textContaining('Loop rules used'), findsOneWidget);
+  });
+
+  testWidgets('a big box asks before searching: Cancel does not search, Search anyway does', (tester) async {
+    final c = await pump(tester, servants: 5, withQuest: true, longSearchTeams: 1); // any box counts as big
+    expect(c.teamCount(), greaterThan(1));
+    await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+    await tester.pumpAndSettle();
+    expect(find.text('This search may take a while'), findsOneWidget);
+    expect(find.textContaining('at most ${kSolveTimeBudget.inMinutes} minutes'), findsOneWidget);
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
+    expect(c.progress, isNull);
+    await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Search anyway'));
+    await tester.pumpAndSettle();
+    expect(c.progress, isNotNull);
+  });
+
+  testWidgets('a small box searches straight away, without asking', (tester) async {
+    final c = await pump(tester, servants: 5, withQuest: true);
+    expect(c.teamCount(), lessThanOrEqualTo(kLongSearchTeams));
+    await tester.tap(find.widgetWithText(FilledButton, 'Search'));
+    await tester.pumpAndSettle();
+    expect(find.text('This search may take a while'), findsNothing);
+    expect(c.progress, isNotNull);
   });
 
   group('owned servants tab', () {

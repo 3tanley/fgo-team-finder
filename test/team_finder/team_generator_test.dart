@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:chaldea/app/team_finder/defaults.dart';
@@ -169,6 +171,23 @@ void main() async {
     final plain = generateTeams(box([altria, nero, daVinci, emiya, altria]), Region.jp).toList();
     expect(plain, isNotEmpty);
     expect(plain.every((t) => t.slots.length == 3), isTrue);
+  });
+
+  test('swap-ins share a team [kBackRow] to a back row, and every swap-in is in a team of its front', () {
+    final skadi = idOf(357), koya = idOf(314), oberon = idOf(316);
+    final teams = generateTeams(box([altria, nero, castoria, oberon, koya, skadi]), Region.jp).toList();
+    expect(teams.every((t) => t.slots.length <= 3 + kBackRow), isTrue);
+    final first = teams.firstWhere(
+      (t) => t.slots.length > 3 && t.slots[1].servant.svtId == altria && t.slots[2].servant.svtId == nero,
+    );
+    String front(TeamSpec t) => t.slots.take(3).map((s) => s.key).join('|');
+    final same = teams.where((t) => front(t) == front(first)).toList();
+    // four swap-ins, [kBackRow] to a team
+    expect(
+      same.map((t) => t.slots.length - 3).toList()..sort(),
+      [for (var n = 0; n < 4; n += kBackRow) min(kBackRow, 4 - n)]..sort(),
+    );
+    expect({for (final t in same) ...t.slots.skip(3).map((s) => s.servant.svtId)}, {castoria, oberon, koya, skadi});
   });
 
   group('the support depends on the damage dealer\'s NP card', () {

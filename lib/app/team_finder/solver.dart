@@ -10,15 +10,29 @@ import 'turn_planner.dart';
 /// Smallest box that can make a team: the borrowed support plus two box servants (the damage dealer and a partner).
 const int kMinBoxServants = 2;
 
-/// Wall-clock time a whole request may take (about 6 minutes; the quick pass below gets at most the first quarter).
+/// Wall-clock time a whole request may take (about 10 minutes; the quick pass below gets at most the first quarter).
 /// Every team first gets the loop plan and the
 /// search's quick optimistic check, which also rates how likely the team is to hide a clear (the margin). The
-/// teams the check cannot rule out are then searched in order of that margin, each with up to
-/// [kSearchTurnsPerTeam] turns, until the time is spent. No search starts after that, so a request ends at most
+/// teams the check cannot rule out are then searched best-ranked first, each with up to
+/// [kSearchTurnsPerTeam] turns (more for the top ranks), until the time is spent. No search starts after that, so a request ends at most
 /// one team's search (a few tens of seconds) late. A team whose search finished is final; one that hit its cap
 /// or was never reached is reported as not settled (the request is [SolveProgress.truncated]).
-const Duration kSolveTimeBudget = Duration(minutes: 6);
+const Duration kSolveTimeBudget = Duration(minutes: 10);
+
+/// A search over more teams than this will probably use the whole budget (the quick check costs about half a second
+/// a team in the browser, and most teams then need a search of a few seconds), so the page asks before starting it.
+const int kLongSearchTeams = 100;
 const int kSearchTurnsPerTeam = 400;
+
+/// A team whose search hits its cap is searched again with a bigger one once the others have had a go, and the best
+/// ranked [kTopRankedTeams] (see team_priority.dart) go on to [kTopSearchTurns]: they are the likeliest to hide a
+/// clear, and a clear can need a long search (the owner's Earth + Draco loop needs about 500 turns).
+const int kTopRankedTeams = 40;
+const int kTopSearchTurns = 1500;
+
+/// The share of the time left after the quick pass that the broad first search round may use. What is left goes to
+/// searching the best-ranked teams that hit their cap again, with bigger caps.
+const double kBroadSearchShare = 0.4;
 
 /// The quick pass stops after 1/[kQuickTimeDivisor] of the time. A big box has more teams than it can check; the
 /// teams the priority order puts first are the ones worth checking, and the search needs the rest of the time.
@@ -83,6 +97,9 @@ class SolveRequest {
   /// When the search pass stops starting new team searches, counted from the start of [solve].
   final Duration timeBudget;
 
+  /// How many of the best-ranked teams get the big search cap ([kTopSearchTurns]).
+  final int topRanked;
+
   /// The clock behind [timeBudget] (tests replace it).
   final DateTime Function() now;
   bool _cancelled = false;
@@ -94,6 +111,7 @@ class SolveRequest {
     this.ces,
     this.maxSims = 20000,
     this.timeBudget = kSolveTimeBudget,
+    this.topRanked = kTopRankedTeams,
     this.now = DateTime.now,
   });
 
@@ -131,6 +149,25 @@ class SolveProgress {
   });
 }
 
+/// A team with several back-row servants, cut down to the one the clear swapped in (the first when it never swapped),
+/// and the log with the swap's slot number following. A team with at most one back-row servant comes back as it is.
+(TeamSpec, List<String>) withUsedBackup(TeamSpec team, List<String> log) {
+  if (team.slots.length <= 4) return (team, log);
+  final swap = RegExp(r'^(T\d+) swap (\d+) <-> (\d+)$');
+  var keep = 3;
+  final out = <String>[];
+  for (final line in log) {
+    final m = swap.firstMatch(line);
+    if (m == null) {
+      out.add(line);
+    } else {
+      keep = int.parse(m[3]!).clamp(3, team.slots.length - 1);
+      out.add('${m[1]} swap ${m[2]} <-> 3');
+    }
+  }
+  return (TeamSpec([...team.slots.take(3), team.slots[keep]], mysticCode: team.mysticCode), out);
+}
+
 /// Every team from [generateTeams], every plan from [planTurns] (the loop, then the plan search), keeping each
 /// team's best clearing plan. Throws [NeedMoreServants] (as a stream error) for fewer than [kMinBoxServants] box servants.
 /// shortcut: runs on the calling isolate and yields to the event loop between teams; move the engine
@@ -159,7 +196,7 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   final results = <TeamResult>[];
   final unresolved = <TeamSpec>[];
   final later = <TeamSpec>[]; // searched at the short cap without a verdict, waiting for the full cap
-  final slackOf = <TeamSpec, double>{};
+  final rankOf = {for (final (i, t) in teams.indexed) t: i};
   var nonViable = 0, sims = 0, done = 0;
   var truncated = false;
   SolveProgress snapshot({bool finished = false}) => SolveProgress(
@@ -173,14 +210,18 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
     finished: finished,
     unresolved: unresolved.length + later.length,
   );
-  TeamResult resultOf(TeamSpec team, TurnPlan plan, BattleOutcome out) => TeamResult(
-    team: team,
-    plan: plan,
-    unverified: out.unverified,
-    totalNpDamage: out.totalNpDamage,
-    log: out.log,
-    records: out.records,
-  );
+  TeamResult resultOf(TeamSpec team, TurnPlan plan, BattleOutcome out) {
+    final (used, log) = withUsedBackup(team, out.log);
+    return TeamResult(
+      team: used,
+      plan: plan,
+      unverified: out.unverified,
+      totalNpDamage: out.totalNpDamage,
+      log: log,
+      records: out.records,
+    );
+  }
+
   void addResult(TeamResult r) => results
     ..add(r)
     ..sort((a, b) => b.totalNpDamage.compareTo(a.totalNpDamage));
@@ -212,7 +253,6 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
         if (best == null || out.totalNpDamage > best.totalNpDamage) best = resultOf(team, plan, out);
       } else if (out.searchCapped) {
         capped = true;
-        slackOf[team] = out.searchSlack;
       }
     }
     done++;
@@ -230,34 +270,50 @@ Stream<SolveProgress> solve(SolveRequest req, BattleRunner runner) async* {
   // Search pass: the teams the quick check could not rule out, likeliest first, out of a shared budget.
   if (done == teams.length || screenTimedOut) {
     yield snapshot();
-    // the teams with the most optimistic margin first: they are the likeliest to hide a clear
-    unresolved.sort((a, b) => (slackOf[b] ?? 0).compareTo(slackOf[a] ?? 0));
+    // the best-ranked first: they are the likeliest to hide a clear (the optimistic margin did not predict clears)
+    unresolved.sort((a, b) => rankOf[a]!.compareTo(rankOf[b]!));
     // too many teams for the full cap each in the time left (judged from how fast the quick pass went): two rounds
     final spent = req.now().difference(started);
     final perCheck = done == 0 ? Duration.zero : spent ~/ done;
     final twoRounds = perCheck * kFullSearchInQuickChecks * unresolved.length > req.timeBudget - spent;
-    final retried = <TeamSpec>{};
+    // a team that hits its cap without a verdict is searched again with the next cap; only the top ranks get the
+    // last, big one. The broad first round gets just [kBroadSearchShare] of the time, so the deeper rounds are always
+    // reached; the teams it did not get to wait until those are done.
+    final ladder = [if (twoRounds) kFirstSearchTurns, kSearchTurnsPerTeam, kTopSearchTurns];
+    final step = <TeamSpec, int>{};
+    final broadEnd = spent + (req.timeBudget - spent) * kBroadSearchShare;
     while ((unresolved.isNotEmpty || later.isNotEmpty) && !req.cancelled) {
-      if (unresolved.isEmpty) {
-        unresolved.addAll(later);
-        later.clear();
-      }
       if (req.now().difference(started) >= req.timeBudget || sims >= req.maxSims) {
         truncated = true;
-        nonViable += unresolved.length;
+        nonViable += unresolved.length + later.length; // none of them settled: reported as hitting the search limit
         unresolved.clear();
+        later.clear();
         break;
       }
-      final team = unresolved.removeAt(0);
-      final cap = twoRounds && !retried.contains(team) ? kFirstSearchTurns : kSearchTurnsPerTeam;
+      final broad = unresolved.isNotEmpty && (later.isEmpty || req.now().difference(started) < broadEnd);
+      final TeamSpec team;
+      if (broad) {
+        team = unresolved.removeAt(0);
+      } else {
+        // the smaller cap first, the best-ranked first within a cap
+        team = later.reduce((a, b) {
+          final c = step[a]!.compareTo(step[b]!);
+          return (c != 0 ? c : rankOf[a]!.compareTo(rankOf[b]!)) <= 0 ? a : b;
+        });
+        later.remove(team);
+      }
+      final at = step[team] ?? 0;
+      final cap = ladder[at];
       final plan = planTurns(team, searchSims: cap).last; // the search plan
       final out = await runner.run(team, req.quest, plan);
       sims++;
       if (out.clearedAllWaves) {
         addResult(resultOf(team, plan, out));
-      } else if (cap < kSearchTurnsPerTeam && out.searchCapped) {
-        retried.add(team);
-        later.add(team); // not settled at the short cap: again with the full cap once the others have had a go
+      } else if (out.searchCapped &&
+          at + 1 < ladder.length &&
+          (at + 2 < ladder.length || rankOf[team]! < req.topRanked)) {
+        step[team] = at + 1;
+        later.add(team);
       } else {
         nonViable++;
         if (out.searchCapped) truncated = true;

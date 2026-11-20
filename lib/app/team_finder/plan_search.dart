@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:tuple/tuple.dart';
 
 import 'package:chaldea/app/battle/models/battle.dart';
@@ -84,10 +86,7 @@ class PlanSearch {
     _main = {for (final k in chosen.isEmpty ? dealers : chosen) all[k]!.uniqueId};
     final mark = _mark();
     final possible = await _clearsWithEverything();
-    final dealt = battle.recorder.records
-        .whereType<BattleAttackRecord>()
-        .where((a) => a.card?.isTD == true)
-        .fold<int>(0, (sum, a) => sum + a.damage);
+    final dealt = max(_bestDealt, _npDealt());
     final totalHp = quest.waves.expand((w) => w.enemies).fold<int>(0, (sum, e) => sum + e.hp);
     slack = totalHp == 0 ? 0 : dealt / totalHp;
     _restore(mark);
@@ -103,9 +102,19 @@ class PlanSearch {
       ) ??
       false;
 
+  /// The most NP damage any of the optimistic plays dealt (the last turn is tried once per back-row servant).
+  int _bestDealt = 0;
+
+  int _npDealt() => battle.recorder.records
+      .whereType<BattleAttackRecord>()
+      .where((a) => a.card?.isTD == true)
+      .fold<int>(0, (sum, a) => sum + a.damage);
+
   /// Quick way out for hopeless teams: plays the battle with every skill off cooldown every turn (single-target
-  /// ones on every main dealer), every gauge full and the back row swapped in on the last turn. No real plan
-  /// can do better, so a wave that survives this means there is no clear.
+  /// ones on every main dealer), every gauge full and a back-row servant swapped in on the last turn. No real plan
+  /// can do better, so a wave that survives this means there is no clear. With several back-row servants the first
+  /// turns are played once and each of them gets its own last turn from that state: the team is hopeless only if
+  /// all of them are.
   Future<bool> _clearsWithEverything() async {
     for (var t = 0; t < turns && !battle.isBattleWin; t++) {
       final mustClear = quest.waves.length - battle.waveCount + 1 >= turns - t;
@@ -125,22 +134,42 @@ class PlanSearch {
         }
       }
 
-      refresh();
-      final swap = t == turns - 1 ? _swapOptions().firstOrNull : null;
-      if (swap != null) {
-        await useAll([swap.$1]);
+      Future<bool> play((int, int)? swap) async {
         refresh();
-        final incoming = battle.backupAllyServants.firstWhereOrNull((s) => s?.uniqueId == swap.$2);
-        _pendingSwap = Tuple2(_svt(swap.$1)!, incoming!);
-        await battle.activateMysticCodeSkill(_swapSkill()!.idx);
-        _pendingSwap = null;
+        if (swap != null) {
+          await useAll([swap.$1]);
+          refresh();
+          final incoming = battle.backupAllyServants.firstWhereOrNull((s) => s?.uniqueId == swap.$2);
+          _pendingSwap = Tuple2(_svt(swap.$1)!, incoming!);
+          await battle.activateMysticCodeSkill(_swapSkill()!.idx);
+          _pendingSwap = null;
+        }
+        await useAll([-1, 0, 1, 2]);
+        for (var i = 0; i < 3; i++) {
+          _svt(i)?.np = 30000; // the most any gauge can hold, so the check stays optimistic (overcharge)
+        }
+        final all = [0, 1, 2].where((i) => _main.contains(_svt(i)?.uniqueId)).toList();
+        return _fire(t + 1, all, mustClear);
       }
-      await useAll([-1, 0, 1, 2]);
-      for (var i = 0; i < 3; i++) {
-        _svt(i)?.np = 30000; // the most any gauge can hold, so the check stays optimistic (overcharge)
+
+      if (t < turns - 1) {
+        if (!await play(null)) return false;
+        continue;
       }
-      final all = [0, 1, 2].where((i) => _main.contains(_svt(i)?.uniqueId)).toList();
-      if (!await _fire(t + 1, all, mustClear)) return false;
+      final options = <(int, int)?>[];
+      final seen = <int>{};
+      for (final option in _swapOptions()) {
+        if (seen.add(option.$2)) options.add(option); // the first order change for each back-row servant
+      }
+      if (options.isEmpty) options.add(null);
+      var cleared = false;
+      for (final swap in options) {
+        final mark = _mark();
+        cleared = await play(swap) && battle.isBattleWin || cleared;
+        _bestDealt = max(_bestDealt, _npDealt());
+        _restore(mark);
+      }
+      return cleared;
     }
     return battle.isBattleWin;
   }

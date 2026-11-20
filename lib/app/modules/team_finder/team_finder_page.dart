@@ -392,6 +392,29 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
     );
   }
 
+  /// Starts the search; a big box is asked about first, since it will probably use the whole time budget.
+  Future<void> _confirmAndSearch() async {
+    final teams = c.teamCount();
+    if (teams > c.longSearchTeams) {
+      final go = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('This search may take a while'),
+          content: Text(
+            '${c.box.length} servants make $teams teams. The finder checks the likeliest teams first and stops after '
+            'at most ${kSolveTimeBudget.inMinutes} minutes, so it may not reach every team.',
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context, false), child: Text(S.current.cancel)),
+            FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Search anyway')),
+          ],
+        ),
+      );
+      if (go != true || !mounted) return;
+    }
+    await c.search();
+  }
+
   Widget _findTab(SolveProgress? p, String? blocker) {
     return ListView(
       padding: const EdgeInsets.only(bottom: 32),
@@ -459,7 +482,10 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
             children: [
-              FilledButton(onPressed: blocker == null && !c.searching ? c.search : null, child: const Text('Search')),
+              FilledButton(
+                onPressed: blocker == null && !c.searching ? _confirmAndSearch : null,
+                child: const Text('Search'),
+              ),
               const SizedBox(width: 12),
               if (c.searching) OutlinedButton(onPressed: c.cancel, child: const Text('Cancel')),
             ],

@@ -8,18 +8,26 @@ import 'package:chaldea/app/team_finder/battle_runner.dart';
 import 'package:chaldea/app/team_finder/defaults.dart';
 import 'package:chaldea/app/team_finder/models.dart';
 import 'package:chaldea/app/team_finder/solver.dart';
+import 'package:chaldea/app/team_finder/team_generator.dart';
 import 'package:chaldea/models/models.dart' show Region;
 
 /// State and actions behind the Team Finder page. No widgets in here so it can be tested and reused by a website.
 class TeamFinderController extends ChangeNotifier {
-  TeamFinderController({BattleRunner? runner, this.persist = false, this.ownedSetup})
-    : runner = runner ?? EngineBattleRunner();
+  TeamFinderController({
+    BattleRunner? runner,
+    this.persist = false,
+    this.ownedSetup,
+    this.longSearchTeams = kLongSearchTeams,
+  }) : runner = runner ?? EngineBattleRunner();
 
   static const _prefsKey = 'team_finder_box_v1';
   static const _friendsKey = 'team_finder_friends_v1';
   static const _cesKey = 'team_finder_ces_v1';
 
   final BattleRunner runner;
+
+  /// A search over more teams than this is asked about first (see [kLongSearchTeams]).
+  final int longSearchTeams;
 
   /// What Chaldea's own data says about an owned servant (its Plan stats), or null if it is not owned.
   /// Box servants that are owned are re-read from it before every search, so edits made in Chaldea count.
@@ -122,6 +130,12 @@ class TeamFinderController extends ChangeNotifier {
       notifyListeners();
     }
     return changed;
+  }
+
+  /// How many teams a search with the current box, friends and CEs would go through.
+  int teamCount() {
+    refreshOwned();
+    return generateTeams(box.values.toList(), region, friends: friends.values.toList(), ces: ces.toList()).length;
   }
 
   Future<void> search() async {

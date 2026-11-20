@@ -160,7 +160,7 @@ void main() async {
       expect(last.truncated, isFalse);
     });
 
-    test('teams are searched likeliest first and the time budget stops the rest', () async {
+    test('teams are searched best-ranked first and the time budget stops the rest', () async {
       final slack = Map<TeamSpec, double>.identity();
       final searched = <double>[];
       var clock = DateTime(2026);
@@ -182,8 +182,8 @@ void main() async {
       );
       final last = await solve(req, runner).last;
       expect(searched.length, 2); // two searches spend the two minutes
-      expect(searched, [...searched]..sort((a, b) => b.compareTo(a)));
-      expect(searched.first, slack.length - 1); // the biggest margin went first
+      expect(searched, [...searched]..sort()); // the margin was made to grow with the rank number
+      expect(searched.first, 0); // the best-ranked team went first, whatever its margin
       expect(last.truncated, isTrue);
       expect(last.unresolved, 0);
       expect(last.results.length + last.nonViable, last.teamsTotal);
@@ -228,6 +228,7 @@ void main() async {
     test('too many teams for the full cap: a short round first, then the full cap for the teams that hit it', () async {
       var clock = DateTime(2026);
       final caps = <int>[];
+      var full = 0;
       final runner = FakeRunner((team, plan) {
         if (!isSearch(plan)) {
           clock = clock.add(const Duration(seconds: 1)); // only the quick pass takes time
@@ -238,7 +239,7 @@ void main() async {
           return stuck(1, kQuickCheckTurns);
         }
         caps.add(capOf(plan));
-        if (capOf(plan) == kSearchTurnsPerTeam && caps.length > 3) {
+        if (capOf(plan) == kSearchTurnsPerTeam && ++full > 3) {
           return const BattleOutcome(
             clearedAllWaves: true,
             turnsUsed: 3,
@@ -255,17 +256,47 @@ void main() async {
         box: fiveBox,
         maxSims: 100000,
         timeBudget: const Duration(minutes: 5),
+        topRanked: 3,
         now: () => clock,
       );
       final last = await solve(req, runner).last;
       final firstRound = caps.takeWhile((c) => c == kFirstSearchTurns).length;
       expect(firstRound, greaterThan(1));
-      expect(caps.skip(firstRound), everyElement(kSearchTurnsPerTeam)); // the full cap only after every short one
-      expect(caps.where((c) => c == kSearchTurnsPerTeam).length, firstRound); // each short one is retried once
+      // the full cap only after every short one, each short one retried once
+      expect(caps.skip(firstRound).take(firstRound), everyElement(kSearchTurnsPerTeam));
+      // the big cap only for the top ranks that still had no verdict
+      expect(caps.where((c) => c == kTopSearchTurns).length, inInclusiveRange(1, 3));
       expect(last.results, isNotEmpty); // a clear that needs the full cap is still found
     });
 
-    test('few teams, so every one gets the full cap straight away', () async {
+    test('the broad first round gets only part of the time, so the deeper rounds are reached', () async {
+      var clock = DateTime(2026);
+      final caps = <int>[];
+      final runner = FakeRunner((team, plan) {
+        if (!isSearch(plan)) return failed();
+        if (capOf(plan) == kQuickCheckTurns) return stuck(1, kQuickCheckTurns);
+        caps.add(capOf(plan));
+        clock = clock.add(const Duration(minutes: 1)); // every search takes a minute
+        return stuck(1, capOf(plan));
+      });
+      final req = SolveRequest(
+        region: Region.na,
+        quest: quest3,
+        box: fiveBox,
+        maxSims: 100000,
+        timeBudget: const Duration(minutes: 10),
+        now: () => clock,
+      );
+      final last = await solve(req, runner).last;
+      final broad = caps.takeWhile((c) => c == kSearchTurnsPerTeam).length;
+      expect(broad, 4); // 40% of the 10 minutes
+      expect(broad, lessThan(last.teamsTotal)); // teams were left for later while the deeper round ran
+      // then the best-ranked teams that hit their cap, with the big cap; the teams left over resume after them
+      expect(caps.skip(broad).take(broad), everyElement(kTopSearchTurns));
+      expect(caps.length, 10);
+    });
+
+    test('few teams, so every one gets the full cap straight away; the top ranks that had no verdict go on to a bigger one', () async {
       final caps = <int>[];
       final runner = FakeRunner((team, plan) {
         if (!isSearch(plan)) return failed();
@@ -274,7 +305,10 @@ void main() async {
         return stuck(1, 5);
       });
       await solve(request(), runner).last; // the clock does not move: the quick pass looked free
-      expect(caps, everyElement(kSearchTurnsPerTeam));
+      final bigStart = caps.indexOf(kTopSearchTurns);
+      expect(caps.take(bigStart), everyElement(kSearchTurnsPerTeam)); // everyone at the full cap first
+      expect(caps.skip(bigStart), everyElement(kTopSearchTurns)); // then the top ranks that had no verdict
+      expect(caps.length - bigStart, bigStart < kTopRankedTeams ? bigStart : kTopRankedTeams);
     });
 
     test('a clear found in the search pass is reported, with its damage', () async {
@@ -293,6 +327,26 @@ void main() async {
       expect(last.results, isNotEmpty);
       expect(last.results.first.totalNpDamage, 777);
       expect(last.nonViable, 0);
+    });
+  });
+
+  group('withUsedBackup', () {
+    SlotSpec slot(int id) => SlotSpec(ServantSetup.defaults(id));
+    final team = TeamSpec([slot(100100), slot(100200), slot(100300), slot(100500), slot(500900), slot(504500)]);
+
+    test('keeps the back-row servant the clear swapped in, and renumbers the swap in the log', () {
+      final (used, log) = withUsedBackup(team, ['T1 skill 1.1 -> 0', 'T2 swap 2 <-> 5', 'T3 np 1']);
+      expect(used.slots.length, 4);
+      expect(used.slots[3].servant.svtId, 504500);
+      expect(log, ['T1 skill 1.1 -> 0', 'T2 swap 2 <-> 3', 'T3 np 1']);
+    });
+
+    test('with no swap in the log the first back-row servant stays; short teams come back unchanged', () {
+      final (used, log) = withUsedBackup(team, ['T1 np 1']);
+      expect(used.slots[3].servant.svtId, 100500);
+      expect(log, ['T1 np 1']);
+      final four = TeamSpec(team.slots.take(4).toList());
+      expect(withUsedBackup(four, ['T2 swap 2 <-> 3']).$1, same(four));
     });
   });
 }

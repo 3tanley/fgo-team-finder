@@ -21,11 +21,17 @@ CardType? npCardType(int svtId) {
   return null;
 }
 
+/// How many swap-ins share one team (the engine's back row holds 3). With more than one, the quick check plays the
+/// first turns once and the search tries every swap-in of a front together. It is off: on a 24-servant box with the
+/// node 94138610 clears it found 5 clears in 6 minutes against 8 with one swap-in per team (the shared search
+/// costs about what it saves, and fewer fronts get searched).
+const int kBackRow = 1;
+
 /// Teams for the owner's loop: the borrowed support in slot 0 (carrying its bond CE; which support depends on
 /// the damage dealer's NP card, see [kSupportCollectionNosByCard]), every pair of box servants in slots 1-2 (at
-/// least one with a damaging NP), and, in slot 3, a swap-in for the final wave: a box servant from the named
-/// supports that is not in the front. One team per distinct swap-in servant; with none available the team has
-/// no back row. Every team carries the Decisive-Battle Chaldea Uniform at level 10.
+/// least one with a damaging NP), and, in slot 3 on, swap-ins for the last waves: a box servant from the named
+/// supports that is not in the front. The distinct swap-ins share a team, [kBackRow] to a back row; with none
+/// available the team has no back row. Every team carries the Decisive-Battle Chaldea Uniform at level 10.
 ///
 /// [ces] is the user's craft essence list, each with a quantity; none given = one Black Grail. The copies are
 /// handed out in list order: the damage dealers of the pair first, then the pair's other servant, then the
@@ -116,8 +122,13 @@ Iterable<TeamSpec> _allTeams(
             if (swapIns.isEmpty) {
               yield TeamSpec(front, mysticCode: mysticCode);
             } else {
-              for (final swapIn in swapIns) {
-                yield TeamSpec([...front, SlotSpec(swapIn, ce: swapCe)], mysticCode: mysticCode);
+              // the swap-ins that fit the engine's back row share one team: the first turns are played once and the
+              // search tries every one of them for the order change
+              for (var n = 0; n < swapIns.length; n += kBackRow) {
+                yield TeamSpec([
+                  ...front,
+                  for (final swapIn in swapIns.skip(n).take(kBackRow)) SlotSpec(swapIn, ce: swapCe),
+                ], mysticCode: mysticCode);
               }
             }
           }
