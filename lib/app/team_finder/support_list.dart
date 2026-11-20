@@ -3,19 +3,18 @@ import 'package:chaldea/models/models.dart';
 import 'models.dart';
 
 /// Owner's loop-support list, by collection no: Castoria (Altria Caster), Koyanskaya of
-/// Light / of Dark, Oberon, Miss Crane, Scáthach-Skadi, Scáthach-Skadi (Ruler), Urðr.
+/// Light, Oberon, Miss Crane, Scáthach-Skadi, Scáthach-Skadi (Ruler), Urðr.
 /// shortcut: only the owner's named supports; add others once each is checked against a real loop.
-const List<int> kSupportCollectionNos = [284, 314, 334, 316, 307, 215, 357, 470];
+const List<int> kSupportCollectionNos = [284, 314, 316, 307, 215, 357, 470];
 
 /// Which borrowed support goes with a damage dealer's NP card (the owner's rule): Arts -> Castoria or Urðr,
-/// Quick -> Scáthach-Skadi or Scáthach-Skadi (Ruler, "Summer Skadi"), Buster -> Koyanskaya of Light or of Dark.
+/// Quick -> Scáthach-Skadi or Scáthach-Skadi (Ruler, "Summer Skadi"), Buster -> Koyanskaya of Light (not of Dark).
 /// Oberon and Miss Crane are in [kSupportCollectionNos] but fit no card, so they are never the borrowed support
 /// (Oberon is still the final-wave swap-in).
-/// shortcut: "Koyanskaya" is read as both Light and Dark; narrow it here if only one is meant.
 const Map<CardType, List<int>> kSupportCollectionNosByCard = {
   CardType.arts: [284, 470],
   CardType.quick: [215, 357],
-  CardType.buster: [314, 334],
+  CardType.buster: [314],
 };
 
 /// True if [supportSvtId] is a borrowed support the owner pairs with a damage dealer whose NP card is [card].

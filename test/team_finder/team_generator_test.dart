@@ -23,10 +23,10 @@ void main() async {
   final fiveBox = box([altria, castoria, daVinci, nero, summerIbuki]);
 
   int idOf(int collectionNo) => db.gameData.servantsNoDup[collectionNo]!.id;
-  // owner's rule: Arts dealer -> Castoria / Urðr, Quick -> Skadi / Summer Skadi, Buster -> Koyanskaya (Light / Dark)
+  // owner's rule: Arts dealer -> Castoria / Urðr, Quick -> Skadi / Summer Skadi, Buster -> Koyanskaya of Light
   final artsSupports = {idOf(284), idOf(470)};
   final quickSupports = {idOf(215), idOf(357)};
-  final busterSupports = {idOf(314), idOf(334)};
+  final busterSupports = {idOf(314)};
 
   /// First 4-5 star servant (by collection no) whose damaging NP has [card]; the quick one is not pinned by id.
   int dealerWith(CardType card) {

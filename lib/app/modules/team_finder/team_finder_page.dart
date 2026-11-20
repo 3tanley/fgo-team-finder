@@ -249,7 +249,7 @@ class _TeamFinderPageState extends State<TeamFinderPage> with SingleTickerProvid
             padding: EdgeInsets.all(16),
             child: Text(
               'No friend support chosen: the usual support for each damage dealer is used '
-              '(Arts: Castoria or Urðr, Quick: Scáthach-Skadi or Summer Skadi, Buster: Koyanskaya).',
+              '(Arts: Castoria or Urðr, Quick: Scáthach-Skadi or Summer Skadi, Buster: Koyanskaya of Light).',
             ),
           ),
         for (final s in c.friends.values)
